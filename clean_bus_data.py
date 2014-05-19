@@ -5,7 +5,6 @@ import os, sys
 dirs = os.listdir('bus_data/')
 
 for f in dirs:
-  if f[0] == 't':
 	file = open('bus_data/'+f,'r+')
 	lines = file.readlines()
 	headers = lines[0].split('PREDICTABLE')[0] + 'PREDICTABLE\n'
