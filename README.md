@@ -11,7 +11,7 @@ DATA:
 
 	from https://data.sfgov.org/Transportation/Raw-AVL-GPS-data/5fk7-ivit
 
--uber_data includes 25,000 uber black car GPS data in SF (time, loc)
+-uber_data includes 25,000 anonymized uber black car GPS data in SF (time, loc -- dates modified)
 
 	from http://www.infochimps.com/datasets/uber-anonymized-gps-logs
 
@@ -19,9 +19,13 @@ DATA:
 
 	from https://data.sfgov.org/Geography/Streets-of-San-Francisco-Zipped-Shapefile-Format-/wbm8-ratb
 
--maybe also go get some weather records for overlapping dates?
+-maybe also go get some weather records for dates? topology data?
 
 	from wunderground?
+
+-other sources?
+
+	lyft? sidecar? cell phones? garmin/tomtom? clippercard tag on/off?
 
 
 SCRIPTS:
@@ -36,6 +40,8 @@ SCRIPTS:
 THINGS TO ANALYZE:
 
 -compute speed, heading for uber data
+
+-compute acceleration
 
 -speed vs time scatter
 
@@ -63,6 +69,8 @@ THINGS TO ANALYZE:
 
 -radial distribution function (diff times/locs)
 
--compute acceleration/aggressiveness
+-quantify aggressiveness?
 
--create metric for energy efficiency -- associate with driver/time/location
+-create metric for energy efficiency from topology? -- associate with driver/time/location
+
+-can't infer anything driver-specific, data is too anonymized
