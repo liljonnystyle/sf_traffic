@@ -76,3 +76,12 @@ THINGS TO ANALYZE:
 -create metric for energy efficiency from topology? -- associate with driver/time/location
 
 -can't infer anything driver-specific, data is too anonymized
+
+
+Thinking out loud... how to normalize out traffic/routing?
+
+Aggregate M-F data into 'weekday' data. Then group by hours into 24 chunks (or maybe 2 hr chunks?). Each chunk will inform the average traffic pattern at that time of the weekday (hopefully all or most streets are covered). Ultimately, every coordinate (and heading) in every chunk will have a set of features (i.e., speed, acceleration) or possibly a distribution of features.
+
+Then for a given ride, divide their time series by the average features at that location (and heading) for the respective time chunk. Interpolation will be required to line up coordinates.
+
+OR... integrate difference between rider time series and average time series? Maybe instead of time series, it should be distance, evaluated intersection to intersection? Seems difficult, but theoretically doable.
