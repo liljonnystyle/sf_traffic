@@ -9,19 +9,21 @@ DATA:
 
 -bus_data includes bus GPS data in SF (time, loc, heading, speed)
 
-	from https://data.sfgov.org/Transportation/Raw-AVL-GPS-data/5fk7-ivit
+	https://data.sfgov.org/Transportation/Raw-AVL-GPS-data/5fk7-ivit
 
 -uber_data includes 25,000 anonymized uber black car GPS data in SF (time, loc -- dates modified)
 
-	from http://www.infochimps.com/datasets/uber-anonymized-gps-logs
+	http://www.infochimps.com/datasets/uber-anonymized-gps-logs
 
 -street_data includes street shape files for SF streets
 
-	from https://data.sfgov.org/Geography/Streets-of-San-Francisco-Zipped-Shapefile-Format-/wbm8-ratb
+	https://data.sfgov.org/Geography/Streets-of-San-Francisco-Zipped-Shapefile-Format-/wbm8-ratb
 
--maybe also go get some weather records for dates? topology data?
+-maybe also go get some weather records for dates from wunderground? topology data?
 
-	from wunderground?
+-ny taxi data?
+
+	http://www.andresmh.com/nyctaxitrips/
 
 -other sources?
 
