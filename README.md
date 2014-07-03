@@ -78,6 +78,9 @@ THINGS TO ANALYZE:
 -can't infer anything driver-specific, data is too anonymized
 
 
+
+
+
 Thinking out loud... how to normalize out traffic/routing?
 
 Aggregate M-F data into 'weekday' data. Then group by hours into 24 chunks (or maybe 2 hr chunks?). Each chunk will inform the average traffic pattern at that time of the weekday (hopefully all or most streets are covered). Ultimately, every coordinate (and heading) in every chunk will have a set of features (i.e., speed, acceleration) or possibly a distribution of features.
