@@ -9,6 +9,7 @@ import json
 import ast
 import time
 import sys
+import pickle
 
 from pygeocoder import Geocoder, GeocoderError
 from collections import Counter
@@ -68,6 +69,7 @@ def load_streets(n=0):
 		df.columns = colnames
 		df.reset_index(inplace=True)
 		df.pop('index')
+		nstreets = len(df)
 		xstarts = np.zeros((nstreets,1))
 		ystarts = np.zeros((nstreets,1))
 		xstops = np.zeros((nstreets,1))
@@ -78,13 +80,14 @@ def load_streets(n=0):
 		ystarts = pickle.load(open('pickles/ystarts.pkl','rb'))
 		xstops = pickle.load(open('pickles/xstops.pkl','rb'))
 		ystops = pickle.load(open('pickles/ystops.pkl','rb'))
+		nstreets = len(df)
 
 	tmp = np.nonzero(xstarts)[0]
 	if len(tmp) == 0:
 		n = 0
 	else:
 		n = tmp[-1]+1
-	nstreets = len(df)
+
 	for i, row in df.iloc[n:].iterrows():
 		xstarti = row[2]
 		ystarti = row[3]
