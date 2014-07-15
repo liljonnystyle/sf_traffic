@@ -7,7 +7,10 @@ import datetime
 import networkx as nx
 import json
 import ast
+import time
+import sys
 
+from pygeocoder import Geocoder, GeocoderError
 from collections import Counter
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import pdist, squareform
@@ -17,15 +20,15 @@ from sklearn import cluster, datasets
 from sklearn.preprocessing import StandardScaler
 
 # Central finite difference function to estimate derivatives
-def deriv(t,x):
+def deriv(x):
 	"Finite difference derivative of the function f"
 	n = len(x)
-	d = zeros(n,'float') # assume float
+	d = np.zeros(n,'float') # assume float
 	# Use centered differences for the interior points, one-sided differences for the ends
-	for i in range(1,n-1):
-		d[i] = (x.iloc[i+1]-x.iloc[i])/(t.iloc[i+1]-t.iloc[i])
-	d[0] = (x.iloc[1]-x.iloc[0])/(t.iloc[1]-t.iloc[0])
-	d[n-1] = (x.iloc[n-1]-x.iloc[n-2])/(t.iloc[n-1]-t.iloc[n-2])
+	for i in xrange(1,n-1):
+		d[i] = (x.iloc[i+1]-x.iloc[i])/(x.index[i+1]-x.index[i]).total_seconds()
+	d[0] = (x.iloc[1]-x.iloc[0])/(x.index[1]-x.index[0]).total_seconds()
+	d[n-1] = (x.iloc[n-1]-x.iloc[n-2])/(x.index[n-1]-x.index[n-2]).total_seconds()
 	return d
 
 def dparser(datestring):
@@ -46,24 +49,83 @@ def load_uber(nlines=-1):
 	# resample to every 2 seconds
 	return uber_df.iloc[:nlines]
 
-def load_streets():
-	with open('street_centerlines/stclines_streets.json') as f:
-		streets = json.loads(f.read())
+def load_streets(n=0):
+	if n == 0:
+		with open('street_centerlines/stclines_streets.json') as f:
+			streets = json.loads(f.read())
 
-	df = pd.DataFrame()
-	for street in streets['features']:
-		df = pd.concat([df, pd.DataFrame([
-			street['geometry']['coordinates'][0][0] * 3.361683367084648e-06 - 142.61156194517253,
-			street['geometry']['coordinates'][0][1] * 2.8919020878057886e-06 + 31.674134530668592,
-			street['geometry']['coordinates'][-1][0] * 3.361683367084648e-06 - 142.61156194517253,
-			street['geometry']['coordinates'][-1][1] * 2.8919020878057886e-06 + 31.674134530668592,
-			street['properties']['STREETNAME'],
-			street['properties']['ONEWAY']
-			]).T],axis=0)
-	colnames = ['xstart','ystart','xstop','ystop','name','oneway']
-	df.columns = colnames
-	df.reset_index(inplace=True)
-	df.pop('index')
+		df = pd.DataFrame()
+		for street in streets['features']:
+			df = pd.concat([df, pd.DataFrame([
+				street['properties']['STREETNAME'],
+				street['properties']['ONEWAY'],
+				street['geometry']['coordinates'][0][0],
+				street['geometry']['coordinates'][0][1],
+				street['geometry']['coordinates'][-1][0],
+				street['geometry']['coordinates'][-1][1]
+				]).T],axis=0)
+		colnames = ['name','oneway','xstart','ystart','xstop','ystop']
+		df.columns = colnames
+		df.reset_index(inplace=True)
+		df.pop('index')
+		xstarts = np.zeros((nstreets,1))
+		ystarts = np.zeros((nstreets,1))
+		xstops = np.zeros((nstreets,1))
+		ystops = np.zeros((nstreets,1))
+	else:
+		df = pickle.load(open('pickles/street_df.pkl','rb'))
+		xstarts = pickle.load(open('pickles/xstarts.pkl','rb'))
+		ystarts = pickle.load(open('pickles/ystarts.pkl','rb'))
+		xstops = pickle.load(open('pickles/xstops.pkl','rb'))
+		ystops = pickle.load(open('pickles/ystops.pkl','rb'))
+
+	tmp = np.nonzero(xstarts)[0]
+	if len(tmp) == 0:
+		n = 0
+	else:
+		n = tmp[-1]+1
+	nstreets = len(df)
+	for i, row in df.iloc[n:].iterrows():
+		xstarti = row[2]
+		ystarti = row[3]
+		streeti = str(row[0])
+		inds_j = df[ (df['xstop'] == xstarti) & (df['ystop'] == ystarti) ].index
+		if len(inds_j) != 0:
+			streetj = str(df.ix[inds_j[0],'name'][0])
+			intersection = streeti + ' & ' + streetj + ', San Francisco, CA'
+			try:
+				lat,lng = Geocoder.geocode(intersection)[0].coordinates
+			except GeocoderError:
+				time.sleep(2)
+				try:
+					lat,lng = Geocoder.geocode(intersection)[0].coordinates
+				except GeocoderError:
+					print 'daily quota exceeded'
+					pickle.dump(xstarts, open('pickles/xstarts.pkl','wb'))
+					pickle.dump(ystarts, open('pickles/ystarts.pkl','wb'))
+					pickle.dump(xstops, open('pickles/xstops.pkl','wb'))
+					pickle.dump(ystops, open('pickles/ystops.pkl','wb'))
+					sys.exit()
+			xstarts[i] = lng
+			ystarts[i] = lat
+			for j in inds_j:
+				xstops[j] = lng
+				ystops[j] = lat
+
+	for i in xrange(nstreets):
+		if xstarts[i] == 0:
+			xstarts[i] = xstops[i]
+			ystarts[i] = ystops[i]
+		if xstops[i] == 0:
+			xstops[i] = xstarts[i]
+			ystops[i] = ystarts[i]
+	df['xstart'] = xstarts
+	df['ystart'] = ystarts
+	df['xstop'] = xstops
+	df['ystop'] = ystops
+
+	# df = df[ (df['xstop'] != 0) & (df['ystop'] != 0) ]
+
 	return df
 
 def create_graph(df):
@@ -73,9 +135,9 @@ def create_graph(df):
 		start_node = (street['xstart'],street['ystart'])
 		stop_node = (street['xstop'],street['ystop'])
 		if start_node != stop_node:
-			if street['oneway'] != 'F':
-				G.add_edge(start_node, stop_node)
 			if street['oneway'] != 'T':
+				G.add_edge(start_node, stop_node)
+			if street['oneway'] != 'F':
 				G.add_edge(stop_node, start_node)
 	return G
 
@@ -177,32 +239,36 @@ def project(uber_df, G, transG, trans_dict):
 					inds = np.where(edges == oldedge)[0]
 					x = np.arange(len(inds))[:,np.newaxis]
 					y = np.array(np.array(fracs)[inds])
-					lr.fit(x,y)
+					try:
+						lr.fit(x,y)
+					except AttributeError:
+						print x, type(x)
+						print y, type(y)
 					if lr.coef_[0] < 0:
 						newedge = (oldedge[1], oldedge[0])
 						if newedge in G.nodes():
 							for j in curr_inds:
 								newedges[j] = newedge
 								newfracs[j] = 1 - fracs[j]
-						# else:
-						# 	print 'ride ' + str(ride) + ' can not reverse edge ' + str(edge)
-						# 	error = 1
-						# 	return edges, fracs, error
+						else:
+							print 'ride ' + str(ride) + ' can not reverse edge ' + str(edge)
+							error = 1
+							return edges, fracs, error
 					oldedge = edge
 					curr_inds = [i]
 			else:
 				oldedge = edge
 				curr_inds = [i]
 
-		# for i, edge in enumerate(newedges):
-		# 	if i != 0:
-		# 		if edge != oldedge:
-		# 			if edge[0] != oldedge[1]:
-		# 				print 'ride ' + str(ride) + ' node match error:'
-		# 				print '\t' + str(oldedge) + ' & ' + str(edge)
-		# 				error = 1
-		# 				return edges, fracs, error
-		# 	oldedge = edge
+		for i, edge in enumerate(newedges):
+			if i != 0:
+				if edge != oldedge:
+					if edge[0] != oldedge[1]:
+						print 'ride ' + str(ride) + ' node match error:'
+						print '\t' + str(oldedge) + ' & ' + str(edge)
+						error = 1
+						return edges, fracs, error
+			oldedge = edge
 		return newedges, newfracs, error
 
 	def get_trans_edges(edges, fracs, ride):
@@ -237,11 +303,11 @@ def project(uber_df, G, transG, trans_dict):
 			else:
 				transedges[i] = tmp
 
-			# if transedges[i] not in transG.edges:
-			# 	print 'ride ' + str(ride) + ' transition edge mismatch'
-			# 	print 'transition ' + str(transedges[i]) + ' does not exist'
-			# 	error = 1
-			# 	break
+			if transedges[i] not in transG.edges:
+				print 'ride ' + str(ride) + ' transition edge mismatch'
+				print 'transition ' + str(transedges[i]) + ' does not exist'
+				error = 1
+				break
 		return transedges, error
 
 	def update_loc(edges, fracs):
@@ -280,22 +346,63 @@ def project(uber_df, G, transG, trans_dict):
 	# update x and y
 	return uber_df
 
+def compute_speed(uber_df):
+	grouped = uber_df.groupby(['ride'])
+	count = 0
+	for ride, group in grouped:
+		speedx = deriv(group.set_index('datetime')['x'])
+		speedy = deriv(group.set_index('datetime')['y'])
+		if count == 0:
+			speeddf = pd.DataFrame(np.sqrt(speedx**2 + speedy**2),index=[group.index],columns=['speed'])
+		else:
+			speeddf = pd.concat([speeddf,pd.DataFrame(np.sqrt(speedx**2 + speedy**2),index=[group.index],columns=['speed'])])
+		count += 1
+	return speeddf
+
+def compute_accel(uber_df):
+	count = 0
+	for ride, group in df.groupby(['ride']):
+		accel = deriv(group.set_index('datetime')['speed']) # compute acceleration in meter/s/s
+		if count == 0:
+			acceldf = pd.DataFrame(accel,index=[group.index],columns=['accel'])
+		else:
+			acceldf = pd.concat([acceldf,pd.DataFrame(accel,index=[group.index],columns=['accel'])])
+		count += 1
+	return acceldf
+
+def get_features(df):
+	X = pd.DataFrame(df.groupby('ride')['speed'].max())
+	X.columns = ['max_speed']
+	X['avg_speed'] = df.groupby('ride')['speed'].mean()
+	X['med_speed'] = df.groupby('ride')['speed'].median()
+	X['max_accel'] = df[df['accel']>0].groupby('ride')['accel'].max()
+	X['avg_accel'] = df[df['accel']>0].groupby('ride')['accel'].mean()
+	X['med_accel'] = df[df['accel']>0].groupby('ride')['accel'].median()
+	X['max_decel'] = df[df['accel']<0].groupby('ride')['accel'].min()
+	X['avg_decel'] = df[df['accel']<0].groupby('ride')['accel'].mean()
+	X['med_decel'] = df[df['accel']<0].groupby('ride')['accel'].median()
+
+	def mfp(data):
+		nz = np.nonzero(np.append(0,data['speed']))
+		return 4.0*sum(nz)/len(np.where(np.diff(nz) == 1)[0]) #mean free path in seconds
+	X['mfp'] = df[['ride','speed','time']].groupby('ride').apply(mfp)
+	return X
+
 def main():
 	uber_df = load_uber() # resample to every 2 seconds
 
-	street_df = load_streets()
+	# street_df = load_streets()
 
-	street_graph = create_graph(street_df)
-	transition_graph, trans_dict = create_transition_graph(street_graph)
+	# street_graph = create_graph(street_df)
+	# transition_graph, trans_dict = create_transition_graph(street_graph)
 
-	uber_df = project(uber_df, street_graph, transition_graph, trans_dict)
+	# uber_df = project(uber_df, street_graph, transition_graph, trans_dict)
 
+	uber_df = uber_df.join(compute_speed(uber_df))
+	uber_df = uber_df.join(compute_accel(uber_df))
+
+	X = get_features(uber_df)
 	'''
-	compute velocity
-
-	compute acceleration
-
-	create features
 	cluster for specific time windows
 
 	for cluster in clusters:
@@ -310,14 +417,13 @@ def main():
 		compute average acceleration at location on edge
 		# integrate velocity over edge
 		# integrate acceleration over edge
-
+	'''
 	# for ride:
 		# for edge:
 			# subtract average from velocity at location on edge
 			# subtract average from acceleraton at location on edge
 			# integrate velocity (per location) over edge 
 			# integrate acceleration (per location) over edge
-	'''
 
 if __name__ == '__main__':
 	main()
