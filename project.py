@@ -388,10 +388,16 @@ def get_features(df):
 	X['mfp'] = df[['ride','speed','time']].groupby('ride').apply(mfp)
 	return X
 
+# def get_clusters(X, n=4):
+# 	distxy = squareform(pdist(X_scaled, metric='euclidean'))
+# 	linkage(distxy, method='complete')
+
+# 	return clusters?
+
 def main():
 	uber_df = load_uber() # resample to every 2 seconds
 
-	# street_df = load_streets()
+	# street_df = load_streets(n=0)
 
 	# street_graph = create_graph(street_df)
 	# transition_graph, trans_dict = create_transition_graph(street_graph)
@@ -402,13 +408,18 @@ def main():
 	uber_df = uber_df.join(compute_accel(uber_df))
 
 	X = get_features(uber_df)
+
+	# time_spans = [...]
+	# for time_span in time_spans:
+	##	subset uber_df
+	#	X = get_features(sub_df)
+	#	clusters = get_clusters(X, n=4)
+	#	for cluster in clusters:
+	#		clone trans_graph
+	#		for i, edge in transition_graph.edges_iter():
+	#			edge['weight'] = compute_edge_weights(edge)
+	
 	'''
-	cluster for specific time windows
-
-	for cluster in clusters:
-		for edge in transition graph:
-			compute edge weights
-
 	djikstras algorithm or a*
 
 	for edge in graph:
