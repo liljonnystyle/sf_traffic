@@ -1,0 +1,6 @@
+Need this for converting street coords to lat long.
+
+
+http://www.ngs.noaa.gov/PC_PROD/SPCS83/
+Description:
+Converts NAD 83 state plane coordinates to NAD 83 geographic positions and conversely
