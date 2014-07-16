@@ -10,6 +10,7 @@ import ast
 import time
 import sys
 import pickle
+import psycopg2 as psycho
 
 from pygeocoder import Geocoder, GeocoderError
 from collections import Counter
@@ -50,70 +51,96 @@ def load_uber(nlines=-1):
 	# resample to every 2 seconds
 	return uber_df.iloc[:nlines]
 
-def load_streets(n=0):
-	if n == 0:
-		with open('street_centerlines/stclines_streets.json') as f:
-			streets = json.loads(f.read())
+def load_streets():
+	with open('street_centerlines/stclines_streets.json') as f:
+		streets = json.loads(f.read())
 
-		df = pd.DataFrame()
-		for street in streets['features']:
-			df = pd.concat([df, pd.DataFrame([
-				street['properties']['STREETNAME'],
-				street['properties']['ONEWAY'],
-				street['geometry']['coordinates'][0][0],
-				street['geometry']['coordinates'][0][1],
-				street['geometry']['coordinates'][-1][0],
-				street['geometry']['coordinates'][-1][1]
-				]).T],axis=0)
-		colnames = ['name','oneway','xstart','ystart','xstop','ystop']
-		df.columns = colnames
-		df.reset_index(inplace=True)
-		df.pop('index')
-		nstreets = len(df)
-		xstarts = np.zeros((nstreets,1))
-		ystarts = np.zeros((nstreets,1))
-		xstops = np.zeros((nstreets,1))
-		ystops = np.zeros((nstreets,1))
-	else:
-		df = pickle.load(open('pickles/street_df.pkl','rb'))
-		xstarts = pickle.load(open('pickles/xstarts.pkl','rb'))
-		ystarts = pickle.load(open('pickles/ystarts.pkl','rb'))
-		xstops = pickle.load(open('pickles/xstops.pkl','rb'))
-		ystops = pickle.load(open('pickles/ystops.pkl','rb'))
-		nstreets = len(df)
+	df = pd.DataFrame()
+	for street in streets['features']:
+		df = pd.concat([df, pd.DataFrame([
+			street['properties']['STREETNAME'],
+			street['properties']['ONEWAY'],
+			street['geometry']['coordinates'][0][0],
+			street['geometry']['coordinates'][0][1],
+			street['geometry']['coordinates'][-1][0],
+			street['geometry']['coordinates'][-1][1]
+			]).T],axis=0)
+	colnames = ['name','oneway','xstart','ystart','xstop','ystop']
+	df.columns = colnames
+	df.reset_index(inplace=True)
+	df.pop('index')
+	nstreets = len(df)
+	xstarts = np.zeros((nstreets,1))
+	ystarts = np.zeros((nstreets,1))
+	xstops = np.zeros((nstreets,1))
+	ystops = np.zeros((nstreets,1))
 
-	tmp = np.nonzero(xstarts)[0]
-	if len(tmp) == 0:
-		n = 0
-	else:
-		n = tmp[-1]+1
+	apikeys = ['AIzaSyDFKC9RzHpgfCdnslTL0QXNHO_JpWcYXuQ',
+			'AIzaSyBTO9qExEKhrwT4lr8g0t3-B99wOWdPZ50',
+			'AIzaSyBxH0Ddo3jA5hs4S2K4p97gOFGTd_JenUo',
+			'AIzaSyDvRO-SXSI4O5k-JuwMimjUysI6-E2Xfp4',
+			'AIzaSyDWrMtTB22XPpHqW1izt86W-IRerEpsa4s',
+			'AIzaSyCRr-NOee3V0leRNBw_INQqiCsvBLf-2sQ',
+			'AIzaSyDYd4vMnyBr55xWb4FVwedgvGOuEHKKAJw',
+			'AIzaSyAnwR8-ENkEK8yJlF9akU6n1PknorTY_wY',
+			'AIzaSyBbKW7pUx7aE6PrBkBDhl3KYPyYufIzh0E',
+			'AIzaSyC7RykRoFJY_fgBDt-vG_JPjDc3BmECCWQ',
+			'AIzaSyD_KHdVxL_r3s2JLFeu-qFG7dhiYsrTISU']
 
-	for i, row in df.iloc[n:].iterrows():
+	conn = psycho.connect(dbname ='coords')
+	cur = conn.cursor()
+	cur.execute('create table coords (id serial primary key, intersection varchar(100), lat real, lng real)')
+	conn.commit()
+
+	keycount = 0
+	for i, row in df.iterrows():
 		xstarti = row[2]
 		ystarti = row[3]
 		streeti = str(row[0])
 		inds_j = df[ (df['xstop'] == xstarti) & (df['ystop'] == ystarti) ].index
 		if len(inds_j) != 0:
-			streetj = str(df.ix[inds_j[0],'name'][0])
+			streetj = str(df.ix[inds_j[0],'name'])
 			intersection = streeti + ' & ' + streetj + ', San Francisco, CA'
 			try:
-				lat,lng = Geocoder.geocode(intersection)[0].coordinates
-			except GeocoderError:
-				time.sleep(2)
-				try:
-					lat,lng = Geocoder.geocode(intersection)[0].coordinates
-				except GeocoderError:
-					print 'daily quota exceeded'
-					pickle.dump(xstarts, open('pickles/xstarts.pkl','wb'))
-					pickle.dump(ystarts, open('pickles/ystarts.pkl','wb'))
-					pickle.dump(xstops, open('pickles/xstops.pkl','wb'))
-					pickle.dump(ystops, open('pickles/ystops.pkl','wb'))
-					sys.exit()
-			xstarts[i] = lng
-			ystarts[i] = lat
-			for j in inds_j:
-				xstops[j] = lng
-				ystops[j] = lat
+				lat,lng = Geocoder(apikeys[keycount]).geocode(intersection)[0].coordinates
+			except GeocoderError, e:
+				if e[0] == 'ZERO_RESULTS':
+					lat,lng = -1,-1
+				else:
+					time.sleep(1)
+					try:
+						lat,lng = Geocoder(apikeys[keycount]).geocode(intersection)[0].coordinates
+					except GeocoderError:
+						keycount += 1
+						lat,lng = Geocoder(apikeys[keycount]).geocode(intersection)[0].coordinates
+			except ConnectionError:
+				lat,lng = -1,-1
+			cur.execute("""INSERT INTO coords(intersection, lat, lng) VALUES ('%s', '%s', '%s')""" % (intersection, lat, lng))
+			conn.commit()
+		else:
+			address = streeti + ', San Francisco, CA'
+			try:
+				lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
+			except GeocoderError, e:
+				if e[0] == 'ZERO_RESULTS':
+					lat,lng = -1,-1
+				else:
+					time.sleep(1)
+					try:
+						lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
+					except GeocoderError:
+						keycount += 1
+						lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
+			except ConnectionError:
+				lat,lng = -1,-1
+			cur.execute("""INSERT INTO coords(intersection, lat, lng) VALUES ('%s', '%s', '%s')""" % (address, lat, lng))
+			conn.commit()
+
+		xstarts[i] = lng
+		ystarts[i] = lat
+		for j in inds_j:
+			xstops[j] = lng
+			ystops[j] = lat
 
 	for i in xrange(nstreets):
 		if xstarts[i] == 0:
@@ -122,13 +149,15 @@ def load_streets(n=0):
 		if xstops[i] == 0:
 			xstops[i] = xstarts[i]
 			ystops[i] = ystarts[i]
+
 	df['xstart'] = xstarts
 	df['ystart'] = ystarts
 	df['xstop'] = xstops
 	df['ystop'] = ystops
 
+	df = df[df['xstart'] != -1]
 	# df = df[ (df['xstop'] != 0) & (df['ystop'] != 0) ]
-
+	#pickle.dump(df, open('pickles/street_df.pkl','wb'))
 	return df
 
 def create_graph(df):
@@ -373,6 +402,16 @@ def compute_accel(uber_df):
 		count += 1
 	return acceldf
 
+def subset_flag_df(uber_df):
+	reindexed_df = uber_df.set_index('datetime')
+	reindexed_df['rush_hour'] = None
+
+	morning_df = reindexed_df.ix['2007-01-02':'2007-01-07'].between_time('6:00','10:00')
+	reindexed_df[morning_df.index]['rush_hour'] = 'morning'
+	afternoon_df = reindexed_df.ix['2007-01-02':'2007-01-07'].between_time('15:00','19:00')
+	reindexed_df[afternoon_df.index]['rush_hour'] = 'afternoon'
+	return reindexed_df
+
 def get_features(df):
 	X = pd.DataFrame(df.groupby('ride')['speed'].max())
 	X.columns = ['max_speed']
@@ -395,35 +434,41 @@ def get_features(df):
 # 	distxy = squareform(pdist(X_scaled, metric='euclidean'))
 # 	linkage(distxy, method='complete')
 
-# 	return clusters?
+# 	return clusters
+
+# def compute_edge_weight(df,edge):
+# 	grouped = df.groupby('trans_edge')
+# 	for edge,group in grouped:
 
 def main():
 	uber_df = load_uber() # resample to every 2 seconds
 
 	# street_df = load_streets(n=0)
+	street_df = pickle.load(open('pickles/street_df.pkl','rb'))
 
-	# street_graph = create_graph(street_df)
-	# transition_graph, trans_dict = create_transition_graph(street_graph)
+	street_graph = create_graph(street_df)
+	transition_graph, trans_dict = create_transition_graph(street_graph)
 
-	# uber_df = project(uber_df, street_graph, transition_graph, trans_dict)
+	uber_df = project(uber_df, street_graph, transition_graph, trans_dict)
 
 	uber_df = uber_df.join(compute_speed(uber_df))
 	uber_df = uber_df.join(compute_accel(uber_df))
 
-	X = get_features(uber_df)
+	uber_df = subset_flag_df(uber_df)
 
-	# time_spans = [...]
-	# for time_span in time_spans:
-	##	subset uber_df
-	#	X = get_features(sub_df)
-	#	clusters = get_clusters(X, n=4)
-	#	for cluster in clusters:
-	#		clone trans_graph
-	#		for i, edge in transition_graph.edges_iter():
-	#			edge['weight'] = compute_edge_weights(edge)
+	rush_hour_flags = [None,'morning','afternoon']
+
+	for flag in rush_hour_flags:
+		flag_df = uber_df[uber_df['rush_hour'] == flag]
+		X = get_features(flag_df)
+		clusters = get_clusters(X, n=4)
+		for cluster in clusters:
+			clone_graph = transition_graph
+			for i, edge in clone_graph.edges_iter():
+				edge['weight'] = compute_edge_weight(flag_df,edge)
 	
 	'''
-	djikstras algorithm or a*
+	nx.astar_path(transition_graph,source,target)
 
 	for edge in graph:
 		group drivers by edge
