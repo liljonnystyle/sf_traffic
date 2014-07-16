@@ -1,0 +1,121 @@
+C     SccsID = "$Id: intgp.for 54962 2011-06-12 01:03:03Z Srinivas.Reddy $"  
+       SUBROUTINE INTGP
+*
+*
+      IMPLICIT REAL*8(A-H,O-Z)
+      CHARACTER*1 YN,YN1
+      CHARACTER*11 CLAT
+      CHARACTER*12 CLON
+      CHARACTER*30 NAME,PCFIL
+      CHARACTER*80 CARDR
+      CHARACTER*1 EW
+      DIMENSION ICODE(3)
+      LOGICAL FILFLAG
+      LOGICAL EWFLAG
+      COMMON/LATLON/LD,LM,SLAT,LOD,LOM,SLON
+
+      FILFLAG=.FALSE.
+
+      WRITE(*,10)
+   10 FORMAT('0DO YOU WANT THE OUTPUT SAVED IN A FILE (Y/N)? ')
+      READ(*,20) YN
+   20 FORMAT(A1)
+
+      IF((YN.EQ.'Y').OR.(YN.EQ.'y')) THEN
+   25   WRITE(*,30)
+   30   FORMAT('0OUTPUT FILE NAME: ')
+        READ(*,40) PCFIL
+   40   FORMAT(A30)
+        OPEN(3,STATUS='NEW',FILE=PCFIL,ERR=900)
+        FILFLAG=.TRUE.
+        CALL HDGP
+      ENDIF
+
+      GO TO 50
+
+ 900  WRITE(*,901)
+ 901  FORMAT('0 FILE ALREADY EXIST, DO YOU WANT TO '/,
+     &       '  WRITE OVER IT (Y/N) '/,
+     &       '  TYPE ANSWER  '/)
+      READ(*,20) YN
+
+           IF((YN.EQ.'Y').OR.(YN.EQ.'y')) THEN
+             OPEN(3,STATUS='UNKNOWN',FILE=PCFIL)
+             FILFLAG=.TRUE.
+             CALL HDGP
+           ELSE
+             GO TO 25
+           ENDIF
+
+
+   50 IF(FILFLAG) THEN
+        WRITE(*,52)
+   52   FORMAT('0ENTER STATION NAME: ')
+        READ(*,40) NAME
+      ELSE
+        NAME='                              '
+      ENDIF
+
+      WRITE(*,60)
+   60 FORMAT('0ENTER LATITUDE:'/,
+     *       ' DD MM SS.SSSSS'/)
+      READ(*,62) LD,LM,SLAT
+   62 FORMAT(I2,1X,I2,1X,F8.5)
+
+        EWFLAG = .FALSE.
+
+      WRITE(*,64)
+   64 FORMAT('0ENTER LONGITUDE: '/,
+     *       ' NOTE: IF THE DEGREES ARE LESS THAN ONE HUNDRED YOU'/,
+     *       ' MUST ENTER A ZERO FIRST. EXAMPLE 96 DEGREES SHOULD BE'/,
+     *       ' 096  '/,
+     *       ' DDD MM SS.SSSSS'/)
+      READ(*,66)LOD,LOM,SLON
+   66 FORMAT(I3,1X,I2,1X,F8.5)
+
+      WRITE(*,167)
+  167 FORMAT('0ENTER THE DIRECTION OF LONGITUDE - E OR W : '/,
+     *       ' ENTER DIRECTION : '/)
+      READ(*,20) EW
+
+         IF(EW.EQ.'E') THEN
+            EWFLAG = .TRUE.
+         ENDIF
+
+
+      WRITE(*,68)
+   68 FORMAT('0ENTER ZONE CODES, AS MANY AS THREE.'/,
+     *       ' (4-DIGITS SEPARATED BY BLANKS OR COMMAS):')
+      READ(*,70)ICODE(1),ICODE(2),ICODE(3)
+   70 FORMAT(I4,1X,I4,1X,I4)
+
+
+      ISEC = SLAT * 1.0D5 + 0.5D0
+      JSEC = SLON * 1.0D5 + 0.5D0
+
+      WRITE(CLAT,67) LD,LM,ISEC
+   67 FORMAT(I2.2,I2.2,I7.7)
+
+      WRITE(CLON,168) LOD,LOM,JSEC
+ 168  FORMAT(I3.3,I2.2,I7.7)
+
+      WRITE(CARDR,71) NAME,CLAT,CLON
+   71 FORMAT(T7,'*80*',T15,A30,T45,A11,T57,A12)
+
+
+      CALL DRGPPC(CARDR,ICODE,FILFLAG,EWFLAG)
+
+      WRITE(*,80)
+   80 FORMAT('0ANY MORE COMPUTATIONS (Y/N)?')
+      READ(*,20) YN1
+
+      IF((YN1.EQ.'N').OR.(YN1.EQ.'n')) THEN
+          IF(FILFLAG) THEN
+              CLOSE(3,STATUS='KEEP')
+          ENDIF
+      ELSE
+          GO TO 50
+      ENDIF
+
+      RETURN
+      END

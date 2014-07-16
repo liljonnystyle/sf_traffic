@@ -1,0 +1,142 @@
+<project name="spcs83" default="deploy" >
+    <property file="/ngs/projects/database/conf/ngsidb_ant_build.properties"/>
+    <property name="exe_name" value="spcs83_pc"/>
+    <property name="exe_name.w" value="${exe_name}.w"/>
+    <property name="destbindir" location="${BLUEBOOKDIR}/bin" />
+    <property name="WRAPPER" value="${BLUEBOOKDIR}/scripts/${WRAPPER_SCRIPT}" />
+    <property name="build" location="build"/>
+    <property name="obj" location="${build}/obj"/>
+    <property name="executable" location="${destbindir}/${exe_name.w}"/>
+    <taskdef resource="cpptasks.tasks"/>
+
+    <!-- set the operating system test properties -->
+    <condition property="isWindows">
+      <os family="windows" />
+    </condition>
+
+    <condition property="isUnix">
+      <os family="unix" />
+    </condition>
+
+    <!-- create directories for build and obj-->
+    <target name="init" if="isUnix">
+      <mkdir dir="${build}"/>
+      <mkdir dir="${obj}"/>
+      <mkdir dir="${destbindir}/backup" />
+    </target>
+    <!-- compile C-modules-->
+    <target name="c_compile" depends="f_compile" if="isUnix">
+        <cc name="cc" subsystem="console" objdir="${obj}" warnings="none">
+           <compilerarg value="-g" if="debug" />
+           <compilerarg value="-DSolaris" />
+           <compilerarg value="-fpp" />
+           <compilerarg value="-DNGS_UNIX_ENV" />
+           <fileset dir="." includes="*.c">
+           </fileset>
+           <includepath >
+           <pathelement location="."/>
+           <pathelement location="${SYBASE_HOME}/include"/>
+           <pathelement location="./include"/>
+           <pathelement location="./ngsinclude"/>
+           </includepath>
+        </cc>
+    </target>
+    <!-- compile Fotran-modules-->
+    <target name="f_compile" depends="init" if="isUnix">
+      <cc name="f77" objdir="${obj}" subsystem="console">
+           <compilerarg value="-g" if="debug" />
+           <compilerarg value="-DSolaris" />
+           <compilerarg value="-fpp" />
+           <compilerarg value="-DNGS_UNIX_ENV" />
+           <fileset dir="." includes="*.for">
+           </fileset>
+           <fileset dir="." includes="*/*.for" >
+           </fileset>
+           <includepath >
+           <pathelement location="."/>
+           <pathelement location="${SYBASE_HOME}/include"/>
+           <pathelement location="./include"/>
+           <pathelement location="./ngsinclude"/>
+        </includepath>
+      </cc>
+    </target>
+    <!-- link objects and make executable-->
+    <target name="linkallunix" depends="c_compile" if="isUnix">
+       <antcall target="backupapp"/>
+       <cc name="f77" outtype="executable" subsystem="console" outfile="${executable}">
+         <fileset dir="${obj}" includes="*.o"/>
+         <libset dir="${SYBASE_HOME}/lib" libs="sybdb"/>
+         <libset dir="${USR_HOME}/lib" libs="nsl,m,socket,dl" />
+       </cc>
+    </target>
+    <target name="linkallwindows" if="isWindows">
+         <exec executable="g77" >
+           <arg value="-xf77-cpp-input" />
+           <arg value="-Wall" />
+           <arg value="-ffortran-bounds-check" />
+           <arg value="*.for" />
+           <arg value="-o" />
+           <arg  value="spcs83" />
+         </exec>
+         <antcall target="windowszip"/>
+   </target>
+
+   <!-- define our main/default target -->
+   <target name="linkall" depends="linkallunix,linkallwindows">
+    <echo message="Operating System: ${os.name}" />
+   </target>
+
+    <target name="deploy" depends="linkall" if="isUnix">
+      <!-- Move executable to deployment directory -->
+      <!-- dev server exe is in build directory -->
+      <!-- test/prod exe is moved to /ngs/projects/bluebook/bin -->
+         <chmod file="${executable}" perm="775" />
+         <antcall target="changegroup"/>
+         <exec executable="ln" >
+            <arg value="-s" />
+            <arg value="${WRAPPER}" />
+            <arg value="${destbindir}/${exe_name}" />
+         </exec>
+         <exec executable="banner" >
+            <arg value="${NGS_SERVERENV}" />            
+         </exec>
+         <echo message="Application deployed to ${destbindir}/${exe_name.w}" />
+         <antcall target="unixzip"/>
+    </target>
+    <!-- Change group to ngssdd in TEST and PROD only -->
+    <target name="changegroup" unless="DEV" if="isUnix">
+         <exec executable="chgrp"  >
+           <arg value="-f" />
+           <arg value="${RELTEAM_UNXGRP}" />
+           <arg value="${executable}" />
+         </exec>
+    </target>
+    <!-- backup the executable only in production environment -->
+    <target name="backupapp" if="PROD,isUnix">
+         <tstamp/>
+         <exec executable="mv" >
+            <arg value="${destbindir}/${exe_name.w}" />
+            <arg value="${destbindir}/backup/${exe_name.w}_${DSTAMP}${TSTAMP}" />
+         </exec>
+    </target>
+    <target name="clean" if="isUnix">
+         <exec executable="rm"  >
+           <arg value="-rf" />
+           <arg value="${obj}" />
+         </exec>
+    </target>
+
+    <target name="unixzip" if="isUnix">
+         <exec executable="/usr/bin/ksh"  >
+            <arg value="-c" />
+            <arg value="zip SPCS83.zip build.xml spcs83.exe *.f *.doc makefile.w32" />
+         </exec>
+    </target>
+    <target name="windowszip" if="isWindows">
+         <exec executable="cmd">
+            <arg line="/c 'C:\Program Files\winzip\wzzip' SPCS83.zip build.xml spcs83.exe *.for *.doc makefile" />
+         </exec>
+    </target>
+ 
+</project>
+

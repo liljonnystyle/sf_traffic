@@ -1,0 +1,28 @@
+C     SccsID = "$Id: todms.for 54978 2011-06-12 01:03:47Z Srinivas.Reddy $"  
+*********************************************************************
+*
+*
+      SUBROUTINE TODMS(RAD,IDG,MIN,SEC)
+C
+C     RADIANS TO DEGREES,MINUTES AND SECONDS
+C
+      REAL*8 RAD,SEC,RHOSEC
+      DATA RHOSEC/2.062648062471D05/
+      SEC=RAD*RHOSEC
+      IDG=SEC/3600.D0
+      SEC=SEC-DBLE(IDG*3600)
+      MIN=SEC/60.D0
+      SEC=SEC-DBLE(MIN*60)
+      IF((60.D0-DABS(SEC)).GT.5.D-6) GO TO 100
+      SEC=SEC-DSIGN(60.D0,SEC)
+      MIN=MIN+ISIGN(1,MIN)
+  100 IF(IABS(MIN).LT.60) GO TO 101
+      MIN=MIN-ISIGN(60,MIN)
+      IDG=IDG+ISIGN(1,IDG)
+  101 MIN=IABS(MIN)
+      SEC=DABS(SEC)
+      IF(RAD.GE.0.D0) GO TO 102
+      IF(IDG.EQ.0) MIN=-MIN
+      IF(IDG.EQ.0.AND.MIN.EQ.0)SEC=-SEC
+  102 RETURN
+      END

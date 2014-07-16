@@ -1,0 +1,393 @@
+
+
+
+
+                       PROGRAM SPCS83
+             (State Plane Coordinates System)
+                   (On the NAD83 Datum)
+
+                                         Programmers: Edward E. Carlson
+                                                      T. Vincenty
+
+                                         Converted By: Edward Carlson
+                                         Last Update:  01/22/02
+                                         Version Number 2.1
+
+                                         Maintained by: Craig Larrimore
+
+
+A:  PURPOSE:
+
+    To convert NAD 83 geodetic positions to NAD 83 state plane
+    coordinates and vice versa.
+
+B:  INPUT:
+
+    1. The program will compute the state plane coordinates or
+       geodetic positions interactively or by batch.
+
+      a. By entering each geodetic position or each plane coordinate.
+
+               OR
+
+      b. By using a Blue Book file with geodetic positions, *80*
+         records, following the format given in Appendix A or a
+         Blue Book file with the state plane coordinates, *81*
+         records, following the format given in Appendix B.
+
+
+C:  OUTPUT:
+
+           EITHER
+
+    1. A screen listing.
+
+           AND/OR
+
+    2. A file with name, latitude, longitude, northing, easting,
+       zone, convergence, scale factor, elevation, and geoid
+       height for geodetic positions to state plane coordinates
+       or a file with name, northing, easting, latitude,
+       longitude, zone, convergence, scale factor , elevation,
+       and geoid height for state plane coordinates to geodetic
+       positions. Note: the geoid height value comes from an *84*
+       record following the format in Appendix C. This record is
+       optional.
+
+           AND/OR
+
+    3. An output file in blue book format. (Only when doing state
+       plane coordinates to geodetic positions)
+
+
+D:  EXECUTION:
+
+    1. Load the program (SPCS83.EXE) from the floppy disk to the
+       main storage, or the program can be executed from a floppy disk
+       drive.
+
+
+    2. To execute the program:
+
+       a. Type SPCS83 or (disk drive name):SPCS83
+          (floppy disk).
+
+       b. The program will prompt for:
+
+          Whether you want to compute:
+
+          I. Geodetic positions to state plane coordinates
+         II. State plane coordinates to geodetic positions.
+        III. Print the output file on the printer.
+
+
+          A. (For requesting I)
+
+                Whether you want to run interactively (Y/N) ?
+
+               a. (If answering Yes)
+
+                 i. Whether you want the output saved in a file ?
+
+                ii. Station name.
+
+               iii. Latitude.
+
+                iv. Longitude.
+
+                 v. Direction of longitude.
+
+                vi. Zone codes, as many as three.
+                    Note- these are the four digit codes in Appendix D.
+
+               b. (If answering No)
+
+                 i. Name of input file in Blue book format.
+
+                ii. Name of output listing.
+                    NOTE: To list the output file in the correct format
+                    one can use option III.
+
+               iii. Zone codes, as many as three.
+                    Note- these are the four digit codes in Appendix D.
+
+                vi. Type of coordinate listing ?
+
+                 v. Project number ?
+
+          B. (For requesting II)
+
+                Whether you want to run interactively (Y/N) ?
+
+               a. (If answering Yes)
+
+                 i. Whether you want the output saved in a file ?
+
+                ii. Station name.
+
+               iii. Northing.
+
+                iv. Easting.
+
+                 v. Zone codes, as many as three.
+                    Note- these are the four digit codes in Appendix D.
+
+               b. (If answering No)
+
+                 i. Name of the input file.
+
+                ii. Name of the output file.  This is the Blue Book
+                    file.
+
+               iii. File name for output listing.
+                    NOTE: To list the output file in the correct format
+                    one can use option III.
+
+                iv. Zone codes, as many as three.
+                    Note- these are the four digit codes in Appendix D.
+
+          C. (For requesting III)
+
+               a. Name of the input file written with fortran options.
+                  This is the output listing from this program.
+
+
+
+
+NOTE: When computing state plane coordinates from a geodetic
+position and then computing a geodetic position using the
+computed state plane coordinates the computed geodetic postion
+may not agree with the starting geodetic position.  State plane
+coordinates are given to only millimeter accuarcy.  Whereas the
+fifth place in the seconds of the latitude and longitude
+corresponds to an accuarcy of approximately one tenth of a
+millimeter.
+
+
+
+                                    @ 0 degrees         @ 80 degrees
+____________________________________________________________________
+
+                    -5
+LATITUDE  ( 1.0 X 10   sec)  --->     0.3 mm               0.3 mm
+
+                    -5
+LONGITUDE ( 1.0 X 10   sec)  --->     0.3 mm               0.0 mm
+
+                                          -5                 -5
+NORTHING  ( 0.001 meter)  --->    3.0 X 10    sec    3.0 X 10    sec
+
+                                          -5                 -5
+EASTING   ( 0.001 meter)  --->    3.0 X 10    sec   19.0 x 10    sec
+
+
+
+
+
+
+
+                   APPENDIX A
+
+          Control Point Record (IE: *80* record) **
+
+    CC01-06   Sequence Number                                (OPTIONAL)
+    CC07-10   Data Code (IE: *80*)
+    CC11-13   Station Serial Number                          (OPTIONAL)
+    CC14      Blank
+    CC15-44   Station Name
+    CC45-55   Geodetic Latitude: Deg-Min-Sec, to 5 decimal places,
+              decimal point implied between CC50-51 (DDMMSSsssss)
+    CC56      Direction of Latitude:  N or S
+    CC57-68   Geodetic Longitude: Deg-Min-Sec, to 5 decimal places,
+              decimal point implied between CC63-64 (DDDMMSSsssss)
+    CC69      Direction of Longitude:  E or W
+    CC70-75   Elevation of mark above MSL, in meters, decimal
+              point implied between CC73-74 (EEEEee)         (OPTIONAL)
+    CC76      Elevation code                                 (OPTIONAL)
+    CC77-78   State or Country Code                          (OPTIONAL)
+    CC79-80   Station Order and Type                         (OPTIONAL)
+
+
+    ** Format specified in the FGCC publication, Input Formats and
+       Specifications of the National Geodetic Survey Data Base.
+
+
+
+
+
+                   APPENDIX B
+
+          Control Point Record (*81* record) **
+
+    CC01-06   Sequence Number                                (OPTIONAL)
+    CC07-10   Data Code (IE: *81*)
+    CC11-13   Station Serial Number                          (OPTIONAL)
+    CC14      Blank
+    CC15-44   Station Name
+    CC45-54   EASTING, in meters, to three decimal places,
+              decimal point implied between CC51-52 (XXXXXXXxxx)
+    CC55-65   NORTHING, in meters, to three decimal places,
+              decimal point implied between CC62-63  (YYYYYYYYyyy)
+    CC66-69   State and Zone code (SSZZ)        See appendix D
+    CC70-75   Elevation of mark above MSL, in meters, decimal
+              point implied between CC73-74 (EEEEee)         (OPTIONAL)
+    CC76      Elevation code                                 (OPTIONAL)
+    CC77-78   State or Country Code                          (OPTIONAL)
+    CC79-80   Station Order and Type                         (OPTIONAL)
+
+
+    ** Format specified in the FGCC publication, Input Formats and
+       Specifications of the National Geodetic Survey Data Base.
+
+
+
+
+
+
+                   APPENDIX C
+
+          Geoid Height Record (*84* record) **
+
+    CC01-06   Sequence Number                                (OPTIONAL)
+    CC07-10   Data Code (IE: *84*)
+    CC11-13   Station Serial Number (must be the as same as *80* record)
+    CC15-20   Source                                         (OPTIONAL)
+    CC21-71   Comments                                       (OPTIONAL)
+    CC72-76   Geoid Height, in meters, above (positive) or below
+              (negitive) the reference ellipsiod, decimal point implied
+              between CC75-76 (GGGGg)
+    CC77-80   Sigma                                          (OPTIONAL)
+
+
+    ** Format specified in the FGCC publication, Input Formats and
+       Specifications of the National Geodetic Survey Data Base.
+
+
+
+
+
+                       APPENDIX D
+
+            STATE PLANE COORDINATES (SPC) ZONE CODES
+
+
+          SPC ZONE CODE       SPC ZONE CODE       SPC ZONE CODE
+
+         AL   E    0101      HI   1    5101      MN   N    2201
+              W    0102           2    5102           C    2202
+                                  3    5103           S    2203
+         AK   1    5001           4    5104                    
+              2    5002           5    5105      MS   E    2301
+              3    5003                               W    2302
+              4    5004      ID   E    1101                    
+              5    5005           C    1102      MO   E    2401
+              6    5006           W    1103           C    2402
+              7    5007                               W    2403
+              8    5008      IL   E    1201                    
+              9    5009           W    1202      MT        2500
+             10    5010                                        
+                             IN   E    1301      NE        2600
+         AZ   E    0201           W    1302                    
+              C    0202                          NV   E    2701
+              W    0203      IA   N    1401           C    2702
+                                  S    1402           W    2703
+         AR   N    0301                                        
+              S    0302      KS   N    1501      NH        2800
+                                  S    1502                    
+         CA   1    0401                          NJ        2900
+              2    0402      KY  1Z    1600                    
+              3    0403           N    1601      NM   E    3001
+              4    0404           S    1602           C    3002
+              5    0405                               W    3003
+              6    0406      LA   N    1701                    
+                                  S    1702                    
+                                 SH    1703      NY   E    3101
+         CO   N    0501                               C    3102
+              C    0502      ME   E    1801           W    3103
+              S    0503           W    1802           L    3104
+                                                               
+         CT        0600      MD        1900      NC        3200
+                                                               
+         DE        0700      MA   M    2001      ND   N    3301
+                                  I    2002           S    3302
+         FL   E    0901                                        
+              W    0902      MI   N    2111      OH   N    3401
+              N    0903           C    2112           S    3402
+                                  S    2113                    
+         GA   E    1001                          OK   N    3501
+              W    1002                               S    3502
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+                                                               
+          SPC ZONE CODE       SPC ZONE CODE       SPC ZONE CODE
+                                                               
+         OR   N    3601      TX   N    4201      WV   N    4701
+              S    3602          NC    4202           S    4702
+                                  C    4203                    
+         PA   N    3701          SC    4204      WI   N    4801
+              S    3702           S    4205           C    4802
+                                                      S    4803
+         RI        3800      UT   N    4301                    
+                                  C    4302      WY   E    4901
+         SC        3900           S    4303      WY  EC    4902
+                                                 WY  WC    4903
+         SD   N    4001      VT        4400      WY   W    4904
+              S    4002                                        
+                             VA   N    4501      VI  PR    5200
+         TN        4100           S    4501                    
+                                                               
+                             WA   N    4601      AS        5300
+                                  S    4602                    
+                                                 GU        5400
+                                                               
+                                                               
+
+
+
+                APPENDIX  E
+
+
+
+ Standard IBM Fortran 77 Runtime Error Messages
+
+
+    3009   Invalid file handle for CLOSE
+
+    3010   Invalid file handle for DELETE
+
+    3011   File deletion failure
+           DOS has indicated and error on an attempt to erase a file
+
+    3012   File opening failure
+           DOS has indicated an error on an attempt to locate or create
+           a file
+
+    3013   Formatted direct record length 1 not found
+
+    3014   Read error on formatted direct record length 1
+
+    3015   Formatted direct record not found
+
+    3016   Read error on formatted direct record
+
+    3017   Unformatted direct record not found
+
+    3019   Read error on unformatted sequential record's header
+
+    3020   Read error on unformatted sequential record
+
+    3023   End of file before newline on reading formatted seqential
+           record
+
+    3024   Formatted sequential input record too long
+
+    4001   Required math coprocessor not found
