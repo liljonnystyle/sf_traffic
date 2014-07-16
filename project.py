@@ -10,7 +10,7 @@ import ast
 import time
 import sys
 import pickle
-import psycopg2 as psycho
+# import psycopg2 as psycho
 
 from pygeocoder import Geocoder, GeocoderError
 from collections import Counter
@@ -51,7 +51,7 @@ def load_uber(nlines=-1):
 	# resample to every 2 seconds
 	return uber_df.iloc[:nlines]
 
-def load_streets():
+def load_streets(n=0):
 	with open('street_centerlines/stclines_streets.json') as f:
 		streets = json.loads(f.read())
 
@@ -70,94 +70,120 @@ def load_streets():
 	df.reset_index(inplace=True)
 	df.pop('index')
 	nstreets = len(df)
-	xstarts = np.zeros((nstreets,1))
-	ystarts = np.zeros((nstreets,1))
-	xstops = np.zeros((nstreets,1))
-	ystops = np.zeros((nstreets,1))
+	# xstarts = np.zeros((nstreets,1))
+	# ystarts = np.zeros((nstreets,1))
+	# xstops = np.zeros((nstreets,1))
+	# ystops = np.zeros((nstreets,1))
 
-	apikeys = ['AIzaSyDFKC9RzHpgfCdnslTL0QXNHO_JpWcYXuQ',
-			'AIzaSyBTO9qExEKhrwT4lr8g0t3-B99wOWdPZ50',
-			'AIzaSyBxH0Ddo3jA5hs4S2K4p97gOFGTd_JenUo',
-			'AIzaSyDvRO-SXSI4O5k-JuwMimjUysI6-E2Xfp4',
-			'AIzaSyDWrMtTB22XPpHqW1izt86W-IRerEpsa4s',
-			'AIzaSyCRr-NOee3V0leRNBw_INQqiCsvBLf-2sQ',
-			'AIzaSyDYd4vMnyBr55xWb4FVwedgvGOuEHKKAJw',
-			'AIzaSyAnwR8-ENkEK8yJlF9akU6n1PknorTY_wY',
-			'AIzaSyBbKW7pUx7aE6PrBkBDhl3KYPyYufIzh0E',
-			'AIzaSyC7RykRoFJY_fgBDt-vG_JPjDc3BmECCWQ',
-			'AIzaSyD_KHdVxL_r3s2JLFeu-qFG7dhiYsrTISU']
+	if n == 0:
+		file81 = open('nad83/input.81','wb')
+		for i, row in df.iterrows():
+			xstart = int(row['xstart']*304.80061)
+			ystart = int(row['ystart']*304.80061)
+			xstop = int(row['xstop']*304.80061)
+			ystop = int(row['ystop']*304.80061)
+			output = '      *81*                                  %10d%11d0403\n' % (xstart, ystart)
+			file81.write(output)
+			output = '      *81*                                  %10d%11d0403\n' % (xstop, ystop)
+			file81.write(output)
+	else:
+		file80 = open('nad83/output.80','rb')
+		for i, row in df.iterrows():
+			line = file80.readline()
+			lat = float(line[44:46]) + float(line[46:48])/60 + float(line[48:50] + '.' + line[50:55])/3600
+			lng = -(float(line[56:59]) + float(line[59:61])/60 + float(line[61:63] + '.' + line[63:68])/3600)
+			row['xstart'] = lng
+			row['ystart'] = lat
+			line = file80.readline()
+			lat = float(line[44:46]) + float(line[46:48])/60 + float(line[48:50] + '.' + line[50:55])/3600
+			lng = -(float(line[56:59]) + float(line[59:61])/60 + float(line[61:63] + '.' + line[63:68])/3600)
+			row['xstop'] = lng
+			row['ystop'] = lat
+		pickle.dump(df, open('pickles/street_df.pkl','wb'))
 
-	conn = psycho.connect(dbname ='coords')
-	cur = conn.cursor()
-	cur.execute('create table coords (id serial primary key, intersection varchar(100), lat real, lng real)')
-	conn.commit()
+	# apikeys = ['AIzaSyDFKC9RzHpgfCdnslTL0QXNHO_JpWcYXuQ',
+	# 		'AIzaSyBTO9qExEKhrwT4lr8g0t3-B99wOWdPZ50',
+	# 		'AIzaSyBxH0Ddo3jA5hs4S2K4p97gOFGTd_JenUo',
+	# 		'AIzaSyDvRO-SXSI4O5k-JuwMimjUysI6-E2Xfp4',
+	# 		'AIzaSyDWrMtTB22XPpHqW1izt86W-IRerEpsa4s',
+	# 		'AIzaSyCRr-NOee3V0leRNBw_INQqiCsvBLf-2sQ',
+	# 		'AIzaSyDYd4vMnyBr55xWb4FVwedgvGOuEHKKAJw',
+	# 		'AIzaSyAnwR8-ENkEK8yJlF9akU6n1PknorTY_wY',
+	# 		'AIzaSyBbKW7pUx7aE6PrBkBDhl3KYPyYufIzh0E',
+	# 		'AIzaSyC7RykRoFJY_fgBDt-vG_JPjDc3BmECCWQ',
+	# 		'AIzaSyD_KHdVxL_r3s2JLFeu-qFG7dhiYsrTISU']
 
-	keycount = 0
-	for i, row in df.iterrows():
-		xstarti = row[2]
-		ystarti = row[3]
-		streeti = str(row[0])
-		inds_j = df[ (df['xstop'] == xstarti) & (df['ystop'] == ystarti) ].index
-		if len(inds_j) != 0:
-			streetj = str(df.ix[inds_j[0],'name'])
-			intersection = streeti + ' & ' + streetj + ', San Francisco, CA'
-			try:
-				lat,lng = Geocoder(apikeys[keycount]).geocode(intersection)[0].coordinates
-			except GeocoderError, e:
-				if e[0] == 'ZERO_RESULTS':
-					lat,lng = -1,-1
-				else:
-					time.sleep(1)
-					try:
-						lat,lng = Geocoder(apikeys[keycount]).geocode(intersection)[0].coordinates
-					except GeocoderError:
-						keycount += 1
-						lat,lng = Geocoder(apikeys[keycount]).geocode(intersection)[0].coordinates
-			except ConnectionError:
-				lat,lng = -1,-1
-			cur.execute("""INSERT INTO coords(intersection, lat, lng) VALUES ('%s', '%s', '%s')""" % (intersection, lat, lng))
-			conn.commit()
-		else:
-			address = streeti + ', San Francisco, CA'
-			try:
-				lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
-			except GeocoderError, e:
-				if e[0] == 'ZERO_RESULTS':
-					lat,lng = -1,-1
-				else:
-					time.sleep(1)
-					try:
-						lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
-					except GeocoderError:
-						keycount += 1
-						lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
-			except ConnectionError:
-				lat,lng = -1,-1
-			cur.execute("""INSERT INTO coords(intersection, lat, lng) VALUES ('%s', '%s', '%s')""" % (address, lat, lng))
-			conn.commit()
+	# conn = psycho.connect(dbname ='coords')
+	# cur = conn.cursor()
+	# cur.execute('create table coords (id serial primary key, intersection varchar(100), lat real, lng real)')
+	# conn.commit()
 
-		xstarts[i] = lng
-		ystarts[i] = lat
-		for j in inds_j:
-			xstops[j] = lng
-			ystops[j] = lat
+	# keycount = 0
+	# for i, row in df.iterrows():
+	# 	xstarti = row[2]
+	# 	ystarti = row[3]
+	# 	streeti = str(row[0])
+	# 	inds_j = df[ (df['xstop'] == xstarti) & (df['ystop'] == ystarti) ].index
+	# 	if len(inds_j) != 0:
+	# 		streetj = str(df.ix[inds_j[0],'name'])
+	# 		intersection = streeti + ' & ' + streetj + ', San Francisco, CA'
+	# 		try:
+	# 			lat,lng = Geocoder(apikeys[keycount]).geocode(intersection)[0].coordinates
+	# 		except GeocoderError, e:
+	# 			if e[0] == 'ZERO_RESULTS':
+	# 				lat,lng = -1,-1
+	# 			else:
+	# 				time.sleep(1)
+	# 				try:
+	# 					lat,lng = Geocoder(apikeys[keycount]).geocode(intersection)[0].coordinates
+	# 				except GeocoderError:
+	# 					keycount += 1
+	# 					lat,lng = Geocoder(apikeys[keycount]).geocode(intersection)[0].coordinates
+	# 		except ConnectionError:
+	# 			lat,lng = -1,-1
+	# 		cur.execute("""INSERT INTO coords(intersection, lat, lng) VALUES ('%s', '%s', '%s')""" % (intersection, lat, lng))
+	# 		conn.commit()
+	# 	else:
+	# 		address = streeti + ', San Francisco, CA'
+	# 		try:
+	# 			lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
+	# 		except GeocoderError, e:
+	# 			if e[0] == 'ZERO_RESULTS':
+	# 				lat,lng = -1,-1
+	# 			else:
+	# 				time.sleep(1)
+	# 				try:
+	# 					lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
+	# 				except GeocoderError:
+	# 					keycount += 1
+	# 					lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
+	# 		except ConnectionError:
+	# 			lat,lng = -1,-1
+	# 		cur.execute("""INSERT INTO coords(intersection, lat, lng) VALUES ('%s', '%s', '%s')""" % (address, lat, lng))
+	# 		conn.commit()
 
-	for i in xrange(nstreets):
-		if xstarts[i] == 0:
-			xstarts[i] = xstops[i]
-			ystarts[i] = ystops[i]
-		if xstops[i] == 0:
-			xstops[i] = xstarts[i]
-			ystops[i] = ystarts[i]
+	# 	xstarts[i] = lng
+	# 	ystarts[i] = lat
+	# 	for j in inds_j:
+	# 		xstops[j] = lng
+	# 		ystops[j] = lat
 
-	df['xstart'] = xstarts
-	df['ystart'] = ystarts
-	df['xstop'] = xstops
-	df['ystop'] = ystops
+	# for i in xrange(nstreets):
+	# 	if xstarts[i] == 0:
+	# 		xstarts[i] = xstops[i]
+	# 		ystarts[i] = ystops[i]
+	# 	if xstops[i] == 0:
+	# 		xstops[i] = xstarts[i]
+	# 		ystops[i] = ystarts[i]
 
-	df = df[df['xstart'] != -1]
-	# df = df[ (df['xstop'] != 0) & (df['ystop'] != 0) ]
-	#pickle.dump(df, open('pickles/street_df.pkl','wb'))
+	# df['xstart'] = xstarts
+	# df['ystart'] = ystarts
+	# df['xstop'] = xstops
+	# df['ystop'] = ystops
+
+	# df = df[df['xstart'] != -1]
+	# # df = df[ (df['xstop'] != 0) & (df['ystop'] != 0) ]
+	
 	return df
 
 def create_graph(df):
@@ -442,30 +468,42 @@ def get_features(df):
 
 def main():
 	uber_df = load_uber() # resample to every 2 seconds
-
+	print 'read uber_df'
 	# street_df = load_streets(n=0)
 	street_df = pickle.load(open('pickles/street_df.pkl','rb'))
+	print 'read street df'
 
 	street_graph = create_graph(street_df)
+	pickle.dump(street_graph,open('pickles/street_graph.pkl','wb'))
+	print 'computed street graph'
+	# street_graph = pickle.load(open('pickles/street_graph.pkl','rb'))
+
 	transition_graph, trans_dict = create_transition_graph(street_graph)
+	pickle.dump(transition_graph,open('pickles/transition_graph.pkl','wb'))
+	pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
+	print 'computed transition graph'
+	# transition_graph = pickle.load(open('pickles/transition_graph.pkl','rb'))
+	# trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
 
 	uber_df = project(uber_df, street_graph, transition_graph, trans_dict)
+	pickle.dump(uber_df,open('pickles/uber_df_projected.pkl','wb'))
+	print 'projected uber onto streets'
+	print 'DONE'
+	# uber_df = uber_df.join(compute_speed(uber_df))
+	# uber_df = uber_df.join(compute_accel(uber_df))
 
-	uber_df = uber_df.join(compute_speed(uber_df))
-	uber_df = uber_df.join(compute_accel(uber_df))
+	# uber_df = subset_flag_df(uber_df)
 
-	uber_df = subset_flag_df(uber_df)
+	# rush_hour_flags = [None,'morning','afternoon']
 
-	rush_hour_flags = [None,'morning','afternoon']
-
-	for flag in rush_hour_flags:
-		flag_df = uber_df[uber_df['rush_hour'] == flag]
-		X = get_features(flag_df)
-		clusters = get_clusters(X, n=4)
-		for cluster in clusters:
-			clone_graph = transition_graph
-			for i, edge in clone_graph.edges_iter():
-				edge['weight'] = compute_edge_weight(flag_df,edge)
+	# for flag in rush_hour_flags:
+	# 	flag_df = uber_df[uber_df['rush_hour'] == flag]
+	# 	X = get_features(flag_df)
+	# 	clusters = get_clusters(X, n=4)
+	# 	for cluster in clusters:
+	# 		clone_graph = transition_graph
+	# 		for i, edge in clone_graph.edges_iter():
+	# 			edge['weight'] = compute_edge_weight(flag_df,edge)
 	
 	'''
 	nx.astar_path(transition_graph,source,target)
