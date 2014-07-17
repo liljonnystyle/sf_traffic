@@ -534,9 +534,9 @@ def get_features(df):
 
 # 	return clusters
 
-# def compute_edge_weight(df,edge):
-# 	grouped = df.groupby('trans_edge')
-# 	for edge,group in grouped:
+def compute_edge_weight(df,edge):
+	grouped = df.groupby('trans_edge')
+	for edge,group in grouped:
 
 def main():
 	uber_df = load_uber() # resample to every 2 seconds
@@ -586,13 +586,24 @@ def main():
 	# uber_df = subset_flag_df(uber_df)
 
 	# rush_hour_flags = [None,'morning','afternoon']
+	# uber_df['cluster_flag'] = None
 
 	# for flag in rush_hour_flags:
 	# 	flag_df = uber_df[uber_df['rush_hour'] == flag]
 	# 	X = get_features(flag_df)
 	# 	clusters = get_clusters(X, n=4)
-	# 	for cluster in clusters:
-	# 		clone_graph = transition_graph
+	#	uber_df['cluster'] = flag_df['ride'].apply(lambda x: clusters[x]) # clusters is a dictionary (ride: cluster)
+	
+	xx, yy = np.meshgrid(rush_hour_flags,np.arange(4))
+	for flag, cluster in zip(flatten(xx),flatten(yy)):
+		clone_graph = transition_graph
+		df = uber_df[(uber_df['rush_hour'] == flag) & (uber_df['cluster'] == cluster)][['speed','trans_edge']]
+		edge_speed_df = df.groupby('trans_edge')['speed'].mean() * trans_edge_len(???)
+		edges = df['trans_edge'].unique()
+		for edge in edges:
+			i = some_trans_graph_dictionary(???)[edge]
+			clone_graph.edges()[i]['weight'] = edge_speed_df[edge]
+
 	# 		for i, edge in clone_graph.edges_iter():
 	# 			edge['weight'] = compute_edge_weight(flag_df,edge)
 	
