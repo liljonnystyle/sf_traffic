@@ -542,15 +542,25 @@ def main():
 	uber_df = load_uber() # resample to every 2 seconds
 	print 'read uber_df'
 
+	uber_df = uber_df[uber_df['x'] >= -122.43]
+	uber_df = uber_df[uber_df['x'] <= -122.40]
+	uber_df = uber_df[uber_df['y'] >= 37.735]
+	uber_df = uber_df[uber_df['y'] <= 37.765]
+
 	# street_df = load_streets(n=0)
 	street_df = pickle.load(open('pickles/street_df.pkl','rb'))
 	print 'read street df'
 
+	street_df = street_df = street_df[(street_df['xstart'] >= -122.43) & (street_df['xstart'] <= -122.40) &
+			(street_df['xstop'] >= -122.43) & (street_df['xstop'] <= -122.40) &
+			(street_df['ystart'] >= 37.735) & (street_df['ystart'] <= 37.765) &
+			(street_df['ystop'] >= 37.735) & (street_df['ystop'] <= 37.765)]
+
 	street_graph, node_dict, edge_dict, coord_lookup = create_graph(street_df)
-	pickle.dump(street_graph,open('pickles/street_graph.pkl','wb'))
-	pickle.dump(node_dict,open('pickles/node_dict.pkl','wb'))
-	pickle.dump(edge_dict,open('pickles/edge_dict.pkl','wb'))
-	pickle.dump(coord_lookup,open('pickles/coord_lookup.pkl','wb'))
+	# pickle.dump(street_graph,open('pickles/street_graph.pkl','wb'))
+	# pickle.dump(node_dict,open('pickles/node_dict.pkl','wb'))
+	# pickle.dump(edge_dict,open('pickles/edge_dict.pkl','wb'))
+	# pickle.dump(coord_lookup,open('pickles/coord_lookup.pkl','wb'))
 	print 'computed street graph'
 	# street_graph = pickle.load(open('pickles/street_graph.pkl','rb'))
 	# node_dict = pickle.load(open('pickles/node_dict.pkl','rb'))
@@ -558,13 +568,13 @@ def main():
 	# coord_lookup = pickle.load(open('pickles/coord_lookup.pkl','rb'))
 	# print 'read street graph'
 
-	# transition_graph, trans_dict = create_transition_graph(street_graph, node_dict, edge_dict)
+	transition_graph, trans_dict = create_transition_graph(street_graph, node_dict, edge_dict)
 	# pickle.dump(transition_graph,open('pickles/transition_graph.pkl','wb'))
 	# pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
-	# print 'computed transition graph'
-	transition_graph = pickle.load(open('pickles/transition_graph.pkl','rb'))
-	trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
-	print 'read transition graph'
+	print 'computed transition graph'
+	# transition_graph = pickle.load(open('pickles/transition_graph.pkl','rb'))
+	# trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
+	# print 'read transition graph'
 
 	uber_df = project(uber_df, street_graph, transition_graph, node_dict, edge_dict, trans_dict, coord_lookup)
 	pickle.dump(uber_df,open('pickles/uber_df_projected.pkl','wb'))
