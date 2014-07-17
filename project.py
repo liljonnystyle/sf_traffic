@@ -199,30 +199,44 @@ def create_graph(df):
 	G=nx.DiGraph()
 	edge_dict = {}
 	node_count = 0
-	node_dict = {}
+	node_coord_dict = {}
+	coord_node_dict = {}
 	coord_lookup = {}
 
 	for i, street in df.iterrows():
-		start_node = node_count
-		node_dict[start_node] = (street['xstart'],street['ystart'])
-		node_count += 1
+		xstart = street['xstart']
+		ystart = street['ystart']
+		xstop = street['xstop']
+		ystop = street['ystop']
 
-		stop_node = node_count
-		node_dict[stop_node] = (street['xstop'],street['ystop'])
-		node_count += 1
-		
-		xstart_trunc = trunc(street['xstart'],2)
-		xstart_truncp = trunc(street['xstart']+0.01,2)
-		xstart_truncm = trunc(street['xstart']-0.01,2)
-		ystart_trunc = trunc(street['ystart'],2)
-		ystart_truncp = trunc(street['ystart']+0.01,2)
-		ystart_truncm = trunc(street['ystart']-0.01,2)
-		xstop_trunc = trunc(street['xstop'],2)
-		xstop_truncp = trunc(street['xstop']+0.01,2)
-		xstop_truncm = trunc(street['xstop']-0.01,2)
-		ystop_trunc = trunc(street['ystop'],2)
-		ystop_truncp = trunc(street['ystop']+0.01,2)
-		ystop_truncm = trunc(street['ystop']-0.01,2)
+		if (xstart,ystart) not in coord_node_dict.keys():
+			start_node = node_count
+			node_coord_dict[start_node] = (xstart,ystart)
+			coord_node_dict[(xstart,ystart)] = node_count
+			node_count += 1
+		else:
+			start_node = coord_node_dict[(xstart,ystart)]
+
+		if (xstop,ystop) not in coord_node_dict.keys():
+			stop_node = node_count
+			node_coord_dict[stop_node] = (xstop,ystop)
+			coord_node_dict[(xstop,ystop)] = node_count
+			node_count += 1
+		else:
+			stop_node = coord_node_dict[(xstop,ystop)]
+
+		xstart_trunc = trunc(xstart,2)
+		xstart_truncp = trunc(xstart+0.01,2)
+		xstart_truncm = trunc(xstart-0.01,2)
+		ystart_trunc = trunc(ystart,2)
+		ystart_truncp = trunc(ystart+0.01,2)
+		ystart_truncm = trunc(ystart-0.01,2)
+		xstop_trunc = trunc(xstop,2)
+		xstop_truncp = trunc(xstop+0.01,2)
+		xstop_truncm = trunc(xstop-0.01,2)
+		ystop_trunc = trunc(ystop,2)
+		ystop_truncp = trunc(ystop+0.01,2)
+		ystop_truncm = trunc(ystop-0.01,2)
 
 		keys = [(xstart_trunc,ystart_trunc),
 				(xstart_truncm,ystart_truncm),
@@ -243,7 +257,7 @@ def create_graph(df):
 				(xstop_truncp,ystop_truncm),
 				(xstop_trunc,ystop_truncm)]
 
-		if node_dict[start_node] != node_dict[stop_node]:
+		if node_coord_dict[start_node] != node_coord_dict[stop_node]:
 			if street['oneway'] != 'T':
 				G.add_edge(start_node, stop_node)
 				edge_dict[(start_node, stop_node)] = [street['name']]
@@ -263,8 +277,8 @@ def create_graph(df):
 						coord_lookup[key] = [(stop_node, start_node)]
 
 	for edge in G.edges_iter():
-		node1 = node_dict[edge[0]]
-		node2 = node_dict[edge[1]]
+		node1 = node_coord_dict[edge[0]]
+		node2 = node_coord_dict[edge[1]]
 		edge_len, edge_vec = edge_eval(node1,node2)
 		edge_dict[edge].append(edge_len)
 		edge_dict[edge].append(edge_vec)
@@ -272,7 +286,7 @@ def create_graph(df):
 	edge_dict keyed on node-node tuple
 	values are list of street name, edge length, edge unit vec
 	'''
-	return G, node_dict, edge_dict, coord_lookup
+	return G, node_coord_dict, coord_node_dict, edge_dict, coord_lookup
 
 def edge_eval(start, stop):
 	length = ((start[0] - stop[0])**2 + (start[1] - stop[1])**2)**0.5
@@ -288,8 +302,8 @@ def shorten_edge(coord, length, unit_vec):
 
 def create_transition_graph(G, node_dict, edge_dict):
 	newG = nx.DiGraph()
-	starts = []
-	stops = []
+	start_dict = {}
+	stop_dict = {}
 	trans_dict = {}
 	node_count = 0
 	trans_node_dict = {}
@@ -297,12 +311,17 @@ def create_transition_graph(G, node_dict, edge_dict):
 		new_edge = shorten_edge(node_dict[edge[0]], edge_dict[edge][1], edge_dict[edge][2])
 		trans_dict[edge] = new_edge
 		newG.add_edge(*new_edge, weight=9999)
-		starts.append([edge[0], new_edge[0]])
-		stops.append([new_edge[1], edge[1]])
-	for stop in stops:
-		newstops = [start[1] for start in starts if start[0] == stop[1]]
-		for newstop in newstops:
-			newG.add_edge(stop[0], newstop, weight=9999)
+		if edge[0] in start_dict:
+			start_dict[edge[0]].append(new_edge[0])
+		else:
+			start_dict[edge[0]] = [new_edge[0]]
+		stop_dict[new_edge[1]] = edge[1]
+
+	for newstop, oldstop in stop_dict.iteritems():
+		if oldstop in start_dict:
+			for newstart in start_dict[oldstop]:
+				newG.add_edge(newstop, newstart, weight=9999)
+
 	return newG, trans_dict
 
 def point_to_line(point, start, stop, edge_len, edge_vec):
@@ -332,21 +351,23 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 	def voting(edges, fracs):
 		for i, edge in enumerate(edges.iloc[1:-1]):
 			# set the beginning and end of moving window
-			if (i == 1) or (i == len(edges) - 2):
-				edgemode, freq = Counter(edges.iloc[i-1:i+2]).most_common(1)[0]
-			elif (i == 2) or (i == len(edges) - 3):
-				edgemode, freq = Counter(edges.iloc[i-2:i+3]).most_common(1)[0]
+			ii = i+1
+			if (ii == 1) or (ii == len(edges) - 2):
+				edgemode, freq = Counter(edges.iloc[ii-1:ii+2]).most_common(1)[0]
+			elif (ii == 2) or (ii == len(edges) - 3):
+				edgemode, freq = Counter(edges.iloc[ii-2:ii+3]).most_common(1)[0]
 			else:
-				edgemode, freq = Counter(edges_str.iloc[i-3:i+4]).most_common(1)[0]
+				edgemode, freq = Counter(edges.iloc[ii-3:ii+4]).most_common(1)[0]
 			
 			if freq == 0:
 				edgemode = edge
 
 			if edge != edgemode:
 				# reset edge column to match mode of moving window
-				edges.iloc[i] = ast.literal_eval(edgemode)
+				print edgemode
+				edges.iloc[ii] = ast.literal_eval(edgemode)
 				# then adjust frac column..
-				fracs.iloc[i] = np.mean(fracs.iloc[i-1:i+1])
+				fracs.iloc[ii] = np.mean(fracs.iloc[ii-1:ii+1])
 		return edges, fracs
 
 	def check_edges(edges, fracs, ride):
@@ -534,9 +555,9 @@ def get_features(df):
 
 # 	return clusters
 
-def compute_edge_weight(df,edge):
-	grouped = df.groupby('trans_edge')
-	for edge,group in grouped:
+# def compute_edge_weight(df,edge):
+# 	grouped = df.groupby('trans_edge')
+# 	for edge,group in grouped:
 
 def main():
 	uber_df = load_uber() # resample to every 2 seconds
@@ -556,19 +577,21 @@ def main():
 			(street_df['ystart'] >= 37.735) & (street_df['ystart'] <= 37.765) &
 			(street_df['ystop'] >= 37.735) & (street_df['ystop'] <= 37.765)]
 
-	street_graph, node_dict, edge_dict, coord_lookup = create_graph(street_df)
+	street_graph, node_coord_dict, coord_node_dict, edge_dict, coord_lookup = create_graph(street_df)
 	# pickle.dump(street_graph,open('pickles/street_graph.pkl','wb'))
-	# pickle.dump(node_dict,open('pickles/node_dict.pkl','wb'))
+	# pickle.dump(node_coord_dict,open('pickles/node_coord_dict.pkl','wb'))
+	# pickle.dump(coord_node_dict,open('pickles/coord_node_dict.pkl','wb'))
 	# pickle.dump(edge_dict,open('pickles/edge_dict.pkl','wb'))
 	# pickle.dump(coord_lookup,open('pickles/coord_lookup.pkl','wb'))
 	print 'computed street graph'
 	# street_graph = pickle.load(open('pickles/street_graph.pkl','rb'))
-	# node_dict = pickle.load(open('pickles/node_dict.pkl','rb'))
+	# node_coord_dict = pickle.load(open('pickles/node_coord_dict.pkl','rb'))
+	# coord_node_dict = pickle.load(open('pickles/coord_node_dict.pkl','rb'))
 	# edge_dict = pickle.load(open('pickles/edge_dict.pkl','rb'))
 	# coord_lookup = pickle.load(open('pickles/coord_lookup.pkl','rb'))
 	# print 'read street graph'
 
-	transition_graph, trans_dict = create_transition_graph(street_graph, node_dict, edge_dict)
+	transition_graph, trans_dict = create_transition_graph(street_graph, node_coord_dict, edge_dict)
 	# pickle.dump(transition_graph,open('pickles/transition_graph.pkl','wb'))
 	# pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
 	print 'computed transition graph'
@@ -594,15 +617,15 @@ def main():
 	# 	clusters = get_clusters(X, n=4)
 	#	uber_df['cluster'] = flag_df['ride'].apply(lambda x: clusters[x]) # clusters is a dictionary (ride: cluster)
 	
-	xx, yy = np.meshgrid(rush_hour_flags,np.arange(4))
-	for flag, cluster in zip(flatten(xx),flatten(yy)):
-		clone_graph = transition_graph
-		df = uber_df[(uber_df['rush_hour'] == flag) & (uber_df['cluster'] == cluster)][['speed','trans_edge']]
-		edge_speed_df = df.groupby('trans_edge')['speed'].mean() * trans_edge_len(???)
-		edges = df['trans_edge'].unique()
-		for edge in edges:
-			i = some_trans_graph_dictionary(???)[edge]
-			clone_graph.edges()[i]['weight'] = edge_speed_df[edge]
+	# xx, yy = np.meshgrid(rush_hour_flags,np.arange(4))
+	# for flag, cluster in zip(flatten(xx),flatten(yy)):
+	# 	clone_graph = transition_graph
+	# 	df = uber_df[(uber_df['rush_hour'] == flag) & (uber_df['cluster'] == cluster)][['speed','trans_edge']]
+	# 	edge_speed_df = df.groupby('trans_edge')['speed'].mean() * trans_edge_len(???)
+	# 	edges = df['trans_edge'].unique()
+	# 	for edge in edges:
+	# 		i = some_trans_graph_dictionary(???)[edge]
+	# 		clone_graph.edges()[i]['weight'] = edge_speed_df[edge]
 
 	# 		for i, edge in clone_graph.edges_iter():
 	# 			edge['weight'] = compute_edge_weight(flag_df,edge)
