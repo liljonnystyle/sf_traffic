@@ -99,7 +99,6 @@ def load_streets(n=0):
 			lng = -(float(line[56:59]) + float(line[59:61])/60 + float(line[61:63] + '.' + line[63:68])/3600)
 			row['xstop'] = lng
 			row['ystop'] = lat
-		pickle.dump(df, open('pickles/street_df.pkl','wb'))
 
 	# apikeys = ['AIzaSyDFKC9RzHpgfCdnslTL0QXNHO_JpWcYXuQ',
 	# 		'AIzaSyBTO9qExEKhrwT4lr8g0t3-B99wOWdPZ50',
@@ -184,41 +183,118 @@ def load_streets(n=0):
 	# df = df[df['xstart'] != -1]
 	# # df = df[ (df['xstop'] != 0) & (df['ystop'] != 0) ]
 	
+	df = df[(df['xstart'] >= -123) & (df['xstart'] <= -122) &
+			(df['xstop'] >= -123) & (df['xstop'] <= -122) &
+			(df['ystart'] >= 37) & (df['ystart'] <= 38) &
+			(df['ystop'] >= 37) & (df['ystop'] <= 38)]
+
 	return df
+
+def trunc(f, n=2):
+    '''Truncates/pads a float f to n decimal places without rounding'''
+    slen = len('%.*f' % (n, f))
+    return str(f)[:slen]
 
 def create_graph(df):
 	G=nx.DiGraph()
-	for street in df.iterrows():
-		street = street[1]
-		start_node = (street['xstart'],street['ystart'])
-		stop_node = (street['xstop'],street['ystop'])
-		if start_node != stop_node:
+	edge_dict = {}
+	node_count = 0
+	node_dict = {}
+	coord_lookup = {}
+
+	for i, street in df.iterrows():
+		start_node = node_count
+		node_dict[start_node] = (street['xstart'],street['ystart'])
+		node_count += 1
+
+		stop_node = node_count
+		node_dict[stop_node] = (street['xstop'],street['ystop'])
+		node_count += 1
+		
+		xstart_trunc = trunc(street['xstart'],2)
+		xstart_truncp = trunc(street['xstart']+0.01,2)
+		xstart_truncm = trunc(street['xstart']-0.01,2)
+		ystart_trunc = trunc(street['ystart'],2)
+		ystart_truncp = trunc(street['ystart']+0.01,2)
+		ystart_truncm = trunc(street['ystart']-0.01,2)
+		xstop_trunc = trunc(street['xstop'],2)
+		xstop_truncp = trunc(street['xstop']+0.01,2)
+		xstop_truncm = trunc(street['xstop']-0.01,2)
+		ystop_trunc = trunc(street['ystop'],2)
+		ystop_truncp = trunc(street['ystop']+0.01,2)
+		ystop_truncm = trunc(street['ystop']-0.01,2)
+
+		keys = [(xstart_trunc,ystart_trunc),
+				(xstart_truncm,ystart_truncm),
+				(xstart_truncm,ystart_trunc),
+				(xstart_truncm,ystart_truncp),
+				(xstart_trunc,ystart_truncp),
+				(xstart_truncp,ystart_truncp),
+				(xstart_truncp,ystart_trunc),
+				(xstart_truncp,ystart_truncm),
+				(xstart_trunc,ystart_truncm),
+				(xstart_trunc,ystart_trunc),
+				(xstop_truncm,ystop_truncm),
+				(xstop_truncm,ystop_trunc),
+				(xstop_truncm,ystop_truncp),
+				(xstop_trunc,ystop_truncp),
+				(xstop_truncp,ystop_truncp),
+				(xstop_truncp,ystop_trunc),
+				(xstop_truncp,ystop_truncm),
+				(xstop_trunc,ystop_truncm)]
+
+		if node_dict[start_node] != node_dict[stop_node]:
 			if street['oneway'] != 'T':
 				G.add_edge(start_node, stop_node)
+				edge_dict[(start_node, stop_node)] = [street['name']]
+				for key in keys:
+					if key in coord_lookup.keys():
+						coord_lookup[key].append((start_node, stop_node))
+					else:
+						coord_lookup[key] = [(start_node, stop_node)]
+
 			if street['oneway'] != 'F':
 				G.add_edge(stop_node, start_node)
-	return G
+				edge_dict[(stop_node, start_node)] = [street['name']]
+				for key in keys:
+					if key in coord_lookup.keys():
+						coord_lookup[key].append((stop_node, start_node))
+					else:
+						coord_lookup[key] = [(stop_node, start_node)]
+
+	for edge in G.edges_iter():
+		node1 = node_dict[edge[0]]
+		node2 = node_dict[edge[1]]
+		edge_len, edge_vec = edge_eval(node1,node2)
+		edge_dict[edge].append(edge_len)
+		edge_dict[edge].append(edge_vec)
+	'''
+	edge_dict keyed on node-node tuple
+	values are list of street name, edge length, edge unit vec
+	'''
+	return G, node_dict, edge_dict, coord_lookup
 
 def edge_eval(start, stop):
 	length = ((start[0] - stop[0])**2 + (start[1] - stop[1])**2)**0.5
 	unit_vec = np.array([(stop[0] - start[0])/length, (stop[1] - start[1])/length])
 	return length, unit_vec
 
-def shorten_edge(edge):
-	length, unit_vec = edge_eval(edge[0], edge[1])
+def shorten_edge(coord, length, unit_vec):
 	# could actually just compute full vector here...
 	# but length and unit_vec give more flexibility for later changes
-	start_node = (edge[0][0]+unit_vec[0]*length*0.01, edge[0][1]+unit_vec[1]*length*0.01)
-	stop_node = (edge[0][0]+unit_vec[0]*length*0.9, edge[0][1]+unit_vec[1]*length*0.9)
-	return start_node, stop_node
+	start_coord = (coord[0]+unit_vec[0]*length*0.01, coord[1]+unit_vec[1]*length*0.01)
+	stop_coord = (coord[0]+unit_vec[0]*length*0.9, coord[1]+unit_vec[1]*length*0.9)
+	return start_coord, stop_coord
 
-def create_transition_graph(G):
+def create_transition_graph(G, node_dict, edge_dict):
 	newG = nx.DiGraph()
 	starts = []
 	stops = []
 	trans_dict = {}
+	node_count = 0
+	trans_node_dict = {}
 	for edge in G.edges_iter():
-		new_edge = shorten_edge(edge)
+		new_edge = shorten_edge(node_dict[edge[0]], edge_dict[edge][1], edge_dict[edge][2])
 		trans_dict[edge] = new_edge
 		newG.add_edge(*new_edge, weight=9999)
 		starts.append([edge[0], new_edge[0]])
@@ -229,53 +305,43 @@ def create_transition_graph(G):
 			newG.add_edge(stop[0], newstop, weight=9999)
 	return newG, trans_dict
 
-def point_to_line(point, start, stop):
-	startstop_len, startstop_vec = edge_eval(start, stop)
+def point_to_line(point, start, stop, edge_len, edge_vec):
 	startpoint_len, startpoint_vec = edge_eval(start, point)
-	cosang = np.dot(startstop_vec, startpoint_vec)
-	sinang = np.linalg.norm(np.cross(startstop_vec, startpoint_vec))
+	cosang = np.dot(edge_vec, startpoint_vec)
+	sinang = np.linalg.norm(np.cross(edge_vec, startpoint_vec))
 	# angle = np.arctan2(sinang, cosang)
 	dist = startpoint_len * sinang
-	frac = startpoint_len * cosang / startstop_len
+	frac = startpoint_len * cosang / edge_len
 	return dist, frac
 
-def project(uber_df, G, transG, trans_dict):
+def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 	def find_nearest_street(data):
+		edges = coord_lookup[(trunc(data[0],2),trunc(data[1],2))]
 		min_dist = 9999
-		for edge in G.edges_iter():
-			dist, frac = point_to_line(data, edge[0], edge[1])
+		for edge in edges:
+			coord1 = node_dict[edge[0]]
+			coord2 = node_dict[edge[1]]
+			dist, frac = point_to_line(data, coord1, coord2, edge_dict[edge][1], edge_dict[edge][2])
 			if dist < min_dist and (frac >= 0 and frac <= 1):
 				min_dist = dist
 				min_edge = edge
 				min_frac = frac
 
 		return pd.Series([min_edge, min_frac])
-		
-	tmp = uber_df[['x','y']].apply(find_nearest_street, axis=1)
-	uber_df['edge'] = tmp[0]
-	uber_df['fraction'] = tmp[1]
 
 	def voting(edges, fracs):
-		edges_str = edges.apply(str)
-		for i, edge in enumerate(edges_str):
+		for i, edge in enumerate(edges.iloc[1:-1]):
 			# set the beginning and end of moving window
-			if i == 0:
-				edgemode = edge
-			elif i == 1:
-				edgemode, freq = Counter(edges_str.iloc[i-1:i+2]).most_common(1)[0]
-				if freq == 0:
-					edgemode = edge
-			elif i == len(edges) - 2:
-				edgemode, freq = Counter(edges_str.iloc[i-1:i+2]).most_common(1)[0]
-				if freq == 0:
-					edgemode = edge
-			elif i == len(edges) - 1:
-				edgemode = edge
+			if (i == 1) or (i == len(edges) - 2):
+				edgemode, freq = Counter(edges.iloc[i-1:i+2]).most_common(1)[0]
+			elif (i == 2) or (i == len(edges) - 3):
+				edgemode, freq = Counter(edges.iloc[i-2:i+3]).most_common(1)[0]
 			else:
-				edgemode, freq = Counter(edges_str.iloc[i-2:i+3]).most_common(1)[0]
-				if freq == 0:
-					edgemode = edge
-			# print str(i) + ': ' + edgemode
+				edgemode, freq = Counter(edges_str.iloc[i-3:i+4]).most_common(1)[0]
+			
+			if freq == 0:
+				edgemode = edge
+
 			if edge != edgemode:
 				# reset edge column to match mode of moving window
 				edges.iloc[i] = ast.literal_eval(edgemode)
@@ -380,7 +446,7 @@ def project(uber_df, G, transG, trans_dict):
 
 	def dftransform(subdf):
 		error = 0
-		edges, fracs = voting(subdf['edge'],subdf['fraction'])
+		edges, fracs = voting(subdf['edge'], subdf['fraction'])
 		edges, fracs, error = check_edges(edges, fracs, subdf['ride'].iloc[0])
 		# if error == 1:
 			# return subdf, edges, error
@@ -390,6 +456,12 @@ def project(uber_df, G, transG, trans_dict):
 		newy, newx = update_loc(edges, fracs)
 
 		return np.vstack([newy, newx, edges, fracs]).T, transedges, error
+
+	tmp = uber_df[['x','y']].apply(find_nearest_street, axis=1)
+
+	uber_df['edge'] = tmp[0]
+	uber_df['fraction'] = tmp[1]
+	uber_df['street'] = uber_df['edge'].apply(lambda x: edge_dict[x][0])
 
 	rides = uber_df['ride'].unique()
 	transedges_array = np.array([])
@@ -469,23 +541,32 @@ def get_features(df):
 def main():
 	uber_df = load_uber() # resample to every 2 seconds
 	print 'read uber_df'
+
 	# street_df = load_streets(n=0)
 	street_df = pickle.load(open('pickles/street_df.pkl','rb'))
 	print 'read street df'
 
-	street_graph = create_graph(street_df)
+	street_graph, node_dict, edge_dict, coord_lookup = create_graph(street_df)
 	pickle.dump(street_graph,open('pickles/street_graph.pkl','wb'))
+	pickle.dump(node_dict,open('pickles/node_dict.pkl','wb'))
+	pickle.dump(edge_dict,open('pickles/edge_dict.pkl','wb'))
+	pickle.dump(coord_lookup,open('pickles/coord_lookup.pkl','wb'))
 	print 'computed street graph'
 	# street_graph = pickle.load(open('pickles/street_graph.pkl','rb'))
+	# node_dict = pickle.load(open('pickles/node_dict.pkl','rb'))
+	# edge_dict = pickle.load(open('pickles/edge_dict.pkl','rb'))
+	# coord_lookup = pickle.load(open('pickles/coord_lookup.pkl','rb'))
+	# print 'read street graph'
 
-	transition_graph, trans_dict = create_transition_graph(street_graph)
-	pickle.dump(transition_graph,open('pickles/transition_graph.pkl','wb'))
-	pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
-	print 'computed transition graph'
-	# transition_graph = pickle.load(open('pickles/transition_graph.pkl','rb'))
-	# trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
+	# transition_graph, trans_dict = create_transition_graph(street_graph, node_dict, edge_dict)
+	# pickle.dump(transition_graph,open('pickles/transition_graph.pkl','wb'))
+	# pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
+	# print 'computed transition graph'
+	transition_graph = pickle.load(open('pickles/transition_graph.pkl','rb'))
+	trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
+	print 'read transition graph'
 
-	uber_df = project(uber_df, street_graph, transition_graph, trans_dict)
+	uber_df = project(uber_df, street_graph, transition_graph, node_dict, edge_dict, trans_dict, coord_lookup)
 	pickle.dump(uber_df,open('pickles/uber_df_projected.pkl','wb'))
 	print 'projected uber onto streets'
 	print 'DONE'
