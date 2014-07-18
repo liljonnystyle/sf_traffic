@@ -16,6 +16,7 @@ from pygeocoder import Geocoder, GeocoderError
 from collections import Counter
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import pdist, squareform
+from sklearn.cluster import KMeans
 from scipy.stats import mode
 from sklearn.linear_model import LinearRegression
 from sklearn import cluster, datasets 
@@ -350,15 +351,20 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 
 	def voting(edges, fracs):
 		broken_chain = np.ones(len(edges))
+		troublemakers = set()
 		for i, edge in enumerate(edges[:-1]):
 			if broken_chain[i]:
 				if (edge == edges[i+1]):
 					broken_chain[i+1] = 0
 					if fracs[i] > fracs[i+1]: # if subsequent edges match, but going wrong direction
-						edges[i] = (edges[i][1], edges[i][0])
-						fracs[i] = 1-fracs[i]
-						edges[i+1] = edges[i]
-						fracs[j] = 1-fracs[j]
+						if (edges[i][1], edges[i][0]) in edge_dict:
+							edges[i] = (edges[i][1], edges[i][0])
+							fracs[i] = 1-fracs[i]
+							edges[i+1] = edges[i]
+							fracs[i+1] = 1-fracs[i+1]
+						else:
+							troublemakers.add(i)
+							troublemakers.add(i+1)
 				elif (edge[0] == edges[i+1][1]) & (edge[1] == edges[i+1][0]): # if subsequent edges flip/flop
 					broken_chain[i+1] = 0
 					if fracs[i] > 1-fracs[i+1]: # 0 is wrong, 1 is right
@@ -368,20 +374,32 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 					for j in xrange(i+1,len(edges)):
 						if edge[0] == edges[j][0]:
 							broken_chain[j] = 0
-							edges[i] = (edges[i][1], edges[i][0])
-							fracs[i] = 1-fracs[i]
+							if (edges[i][1], edges[i][0]) in edge_dict:
+								edges[i] = (edges[i][1], edges[i][0])
+								fracs[i] = 1-fracs[i]
+							else:
+								troublemakers.add(i)
 							break
 						elif edge[0] == edges[j][1]:
 							broken_chain[j] = 0
-							edges[i] = (edges[i][1], edges[i][0])
-							fracs[i] = 1-fracs[i]
-							edges[j] = (edges[j][1], edges[j][0])
-							fracs[j] = 1-fracs[j]
+							if (edges[i][1], edges[i][0]) in edge_dict:
+								edges[i] = (edges[i][1], edges[i][0])
+								fracs[i] = 1-fracs[i]
+							else:
+								troublemakers.add(i)
+							if (edges[j][1], edges[j][0]) in edge_dict:
+								edges[j] = (edges[j][1], edges[j][0])
+								fracs[j] = 1-fracs[j]
+							else:
+								troublemakers.add(j)
 							break
 						elif edge[1] == edges[j][1]:
 							broken_chain[j] = 0
-							edges[j] = (edges[j][1], edges[j][0])
-							fracs[j] = 1-fracs[j]
+							if (edges[j][1], edges[j][0]) in edge_dict:
+								edges[j] = (edges[j][1], edges[j][0])
+								fracs[j] = 1-fracs[j]
+							else:
+								troublemakers.add(j)
 							break
 			else:
 				for j in xrange(i+1,len(edges)):
@@ -393,12 +411,15 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 						else:
 							if edge[1] == edges[j][1]:
 								broken_chain[j] = 0
-								edges[j] = (edges[j][1], edges[j][0])
-								fracs[j] = 1-fracs[j]
+								if (edges[j][1], edges[j][0]) in edge_dict:
+									edges[j] = (edges[j][1], edges[j][0])
+									fracs[j] = 1-fracs[j]
+								else:
+									troublemakers.add(j)
 								break
 							else:
 								break
-		return edges, fracs
+		return edges, fracs, troublemakers
 
 	def check_edges(edges, fracs, ride):
 		error = 0
@@ -489,44 +510,53 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 		newx = np.zeros((len(edges),))
 		newy = np.zeros((len(edges),))
 		for i, edge in enumerate(edges):
-			length, unit_vec = edge_eval(node_coord_dict[edge[0]], node_coord_dict[edge[1]])
+			length, unit_vec = edge_eval(node_dict[edge[0]], node_dict[edge[1]])
 			vec = unit_vec*length*fracs[i]
-			newx[i] = edge[0][0] + vec[0]
-			newy[i] = edge[0][1] + vec[1]
+			newx[i] = node_dict[edge[0]][0] + vec[0]
+			newy[i] = node_dict[edge[0]][1] + vec[1]
 		return newy, newx
 
 	def dftransform(subdf):
 		error = 0
-		edges, fracs = voting(subdf['edge'].values, subdf['fraction'].values)
+		edges, fracs, troublemakers = voting(subdf['edge'].values, subdf['fraction'].values)
 		# edges, fracs, error = check_edges(edges, fracs, subdf['ride'].iloc[0])
 		# if error == 1:
 			# return subdf, edges, error
 		newy, newx = update_loc(edges, fracs)
-		
+
 		transedges, error = get_trans_edges(edges, fracs, subdf['ride'].iloc[0])
 		# if error == 1:
 			# return subdf, edges, error
 
-		return np.vstack([newy, newx, edges, fracs]).T, transedges, error
+		return np.vstack([newy, newx, edges, fracs]).T, transedges, error, troublemakers
 
 	tmp = uber_df[['x','y']].apply(find_nearest_street, axis=1)
+	print 'found nearest edges'
 
 	uber_df['edge'] = tmp[0]
 	uber_df['fraction'] = tmp[1]
 	uber_df['street'] = uber_df['edge'].apply(lambda x: edge_dict[x][0])
 
-	rides = uber_df['ride'].unique()
-	transedges_array = np.array([])
-	for ride in rides:
-		if len(uber_df[uber_df['ride'] == ride]) > 1:
-			tmp, transedges, error = dftransform(uber_df[uber_df['ride'] == ride])
-			uber_df.ix[uber_df['ride'] == ride,['y','x','edge','fraction']] = tmp
-			if error == 1:
-				uber_df = uber_df[uber_df['ride'] != ride]
-			else:
-				transedges_array = np.hstack([transedges_array,transedges])
-	uber_df['trans_edge'] = transedges_array
-	# update x and y
+	# rides = uber_df['ride'].unique()
+	# transedges_array = np.array([])
+	# for ride in rides:
+	# 	if len(uber_df[uber_df['ride'] == ride]) > 1:
+	# 		tmp, transedges, error, troublemakers = dftransform(uber_df[uber_df['ride'] == ride])
+	# 		uber_df.ix[uber_df['ride'] == ride,['y','x','edge','fraction']] = tmp
+	# 		# tmp['troublemakers'] = False
+	# 		# for i in troublemakers:
+	# 		# 	tmp.ix[i,'troublemakers'] = True
+	# 		# uber_df = uber_df[tmp['troublemakers'] == False]
+	# 		if error == 1:
+	# 			uber_df = uber_df[uber_df['ride'] != ride]
+	# 		else:
+	# 			transedges_array = np.hstack([transedges_array,transedges])
+	# 	else:
+	# 		transedges_array = np.hstack([transedges_array, trans_dict[uber_df['edge']]])
+	# uber_df['trans_edge'] = transedges_array
+	uber_df['trans_edge'] = uber_df['edge'].apply(lambda x: trans_dict[x])
+	print 'converted to transition edges'
+
 	return uber_df
 
 def compute_speed(uber_df):
@@ -581,11 +611,13 @@ def get_features(df):
 	X['mfp'] = df[['ride','speed','time']].groupby('ride').apply(mfp)
 	return X
 
-# def get_clusters(X, n=4):
+def get_clusters(X, n=4):
 # 	distxy = squareform(pdist(X_scaled, metric='euclidean'))
 # 	linkage(distxy, method='complete')
+	model = KMeans(n,n_jobs=-1)
+	model.fit(X)
 
-# 	return clusters
+	return model.predict(X)
 
 # def compute_edge_weight(df,edge):
 # 	grouped = df.groupby('trans_edge')
@@ -646,33 +678,38 @@ def main():
 		pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
 		print 'computed transition graph'
 	
+	''' apply Kalman filter first pass here, fix large errors '''
+
 	uber_df = project(uber_df, street_graph, transition_graph, node_coord_dict, edge_dict, trans_dict, coord_lookup)
 	pickle.dump(uber_df,open('pickles/uber_df_projected.pkl','wb'))
 	print 'projected uber onto streets'
-	print 'DONE'
-	# uber_df = uber_df.join(compute_speed(uber_df))
-	# uber_df = uber_df.join(compute_accel(uber_df))
 
-	# uber_df = subset_flag_df(uber_df)
-
-	# rush_hour_flags = [None,'morning','afternoon']
-	# uber_df['cluster_flag'] = None
-
-	# for flag in rush_hour_flags:
-	# 	flag_df = uber_df[uber_df['rush_hour'] == flag]
-	# 	X = get_features(flag_df)
-	# 	clusters = get_clusters(X, n=4)
-	#	uber_df['cluster'] = flag_df['ride'].apply(lambda x: clusters[x]) # clusters is a dictionary (ride: cluster)
+	''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
 	
-	# xx, yy = np.meshgrid(rush_hour_flags,np.arange(4))
-	# for flag, cluster in zip(flatten(xx),flatten(yy)):
-	# 	clone_graph = transition_graph
-	# 	df = uber_df[(uber_df['rush_hour'] == flag) & (uber_df['cluster'] == cluster)][['speed','trans_edge']]
-	# 	edge_speed_df = df.groupby('trans_edge')['speed'].mean() * trans_edge_len(???)
-	# 	edges = df['trans_edge'].unique()
-	# 	for edge in edges:
-	# 		i = some_trans_graph_dictionary(???)[edge]
-	# 		clone_graph.edges()[i]['weight'] = edge_speed_df[edge]
+	uber_df = uber_df.join(compute_speed(uber_df))
+	uber_df = uber_df.join(compute_accel(uber_df))
+
+	uber_df = subset_flag_df(uber_df)
+
+	rush_hour_flags = [None, 'morning', 'afternoon']
+	uber_df['cluster_flag'] = None
+
+	for i,flag in enumerate(rush_hour_flags):
+		flag_df = uber_df[uber_df['rush_hour'] == flag]
+		X = get_features(flag_df)
+		clusters = get_clusters(X, n=4) + i*4
+
+		uber_df['cluster'] = clusters
+
+	xx, yy = np.meshgrid(rush_hour_flags,np.arange(4))
+	for flag, cluster in zip(flatten(xx),flatten(yy)):
+		clone_graph = transition_graph
+		df = uber_df[(uber_df['rush_hour'] == flag) & (uber_df['cluster'] == cluster)][['speed','trans_edge']]
+		edge_speed_df = df.groupby('trans_edge')['speed'].mean() * trans_edge_len(???)
+		edges = df['trans_edge'].unique()
+		for edge in edges:
+			i = some_trans_graph_dictionary(???)[edge]
+			clone_graph.edges()[i]['weight'] = edge_speed_df[edge]
 
 	# 		for i, edge in clone_graph.edges_iter():
 	# 			edge['weight'] = compute_edge_weight(flag_df,edge)
