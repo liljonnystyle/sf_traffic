@@ -349,25 +349,55 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 		return pd.Series([min_edge, min_frac])
 
 	def voting(edges, fracs):
-		for i, edge in enumerate(edges.iloc[1:-1]):
-			# set the beginning and end of moving window
-			ii = i+1
-			if (ii == 1) or (ii == len(edges) - 2):
-				edgemode, freq = Counter(edges.iloc[ii-1:ii+2]).most_common(1)[0]
-			elif (ii == 2) or (ii == len(edges) - 3):
-				edgemode, freq = Counter(edges.iloc[ii-2:ii+3]).most_common(1)[0]
+		broken_chain = np.ones(len(edges))
+		for i, edge in enumerate(edges[:-1]):
+			if broken_chain[i]:
+				if (edge == edges[i+1]):
+					broken_chain[i+1] = 0
+					if fracs[i] > fracs[i+1]: # if subsequent edges match, but going wrong direction
+						edges[i] = (edges[i][1], edges[i][0])
+						fracs[i] = 1-fracs[i]
+						edges[i+1] = edges[i]
+						fracs[j] = 1-fracs[j]
+				elif (edge[0] == edges[i+1][1]) & (edge[1] == edges[i+1][0]): # if subsequent edges flip/flop
+					broken_chain[i+1] = 0
+					if fracs[i] > 1-fracs[i+1]: # 0 is wrong, 1 is right
+						edges[i] = edges[i+1]
+						fracs[i] = 1-fracs[i]
+				else:
+					for j in xrange(i+1,len(edges)):
+						if edge[0] == edges[j][0]:
+							broken_chain[j] = 0
+							edges[i] = (edges[i][1], edges[i][0])
+							fracs[i] = 1-fracs[i]
+							break
+						elif edge[0] == edges[j][1]:
+							broken_chain[j] = 0
+							edges[i] = (edges[i][1], edges[i][0])
+							fracs[i] = 1-fracs[i]
+							edges[j] = (edges[j][1], edges[j][0])
+							fracs[j] = 1-fracs[j]
+							break
+						elif edge[1] == edges[j][1]:
+							broken_chain[j] = 0
+							edges[j] = (edges[j][1], edges[j][0])
+							fracs[j] = 1-fracs[j]
+							break
 			else:
-				edgemode, freq = Counter(edges.iloc[ii-3:ii+4]).most_common(1)[0]
-			
-			if freq == 0:
-				edgemode = edge
-
-			if edge != edgemode:
-				# reset edge column to match mode of moving window
-				print edgemode
-				edges.iloc[ii] = ast.literal_eval(edgemode)
-				# then adjust frac column..
-				fracs.iloc[ii] = np.mean(fracs.iloc[ii-1:ii+1])
+				for j in xrange(i+1,len(edges)):
+					if edge != edges[j]:
+						if (edge[0] == edges[i+1][1]) & (edge[1] == edges[i+1][0]): # if subsequent edges flip/flop
+							broken_chain[j] = 0
+							edges[j] = edges[i]
+							fracs[j] = 1-fracs[j]
+						else:
+							if edge[1] == edges[j][1]:
+								broken_chain[j] = 0
+								edges[j] = (edges[j][1], edges[j][0])
+								fracs[j] = 1-fracs[j]
+								break
+							else:
+								break
 		return edges, fracs
 
 	def check_edges(edges, fracs, ride):
@@ -448,7 +478,7 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 			else:
 				transedges[i] = tmp
 
-			if transedges[i] not in transG.edges:
+			if transedges[i] not in transG.edges():
 				print 'ride ' + str(ride) + ' transition edge mismatch'
 				print 'transition ' + str(transedges[i]) + ' does not exist'
 				error = 1
@@ -459,7 +489,7 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 		newx = np.zeros((len(edges),))
 		newy = np.zeros((len(edges),))
 		for i, edge in enumerate(edges):
-			length, unit_vec = edge_eval(edge[0], edge[1])
+			length, unit_vec = edge_eval(node_coord_dict[edge[0]], node_coord_dict[edge[1]])
 			vec = unit_vec*length*fracs[i]
 			newx[i] = edge[0][0] + vec[0]
 			newy[i] = edge[0][1] + vec[1]
@@ -467,14 +497,15 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 
 	def dftransform(subdf):
 		error = 0
-		edges, fracs = voting(subdf['edge'], subdf['fraction'])
-		edges, fracs, error = check_edges(edges, fracs, subdf['ride'].iloc[0])
-		# if error == 1:
-			# return subdf, edges, error
-		transedges, error = get_trans_edges(edges, fracs, subdf['ride'].iloc[0])
+		edges, fracs = voting(subdf['edge'].values, subdf['fraction'].values)
+		# edges, fracs, error = check_edges(edges, fracs, subdf['ride'].iloc[0])
 		# if error == 1:
 			# return subdf, edges, error
 		newy, newx = update_loc(edges, fracs)
+		
+		transedges, error = get_trans_edges(edges, fracs, subdf['ride'].iloc[0])
+		# if error == 1:
+			# return subdf, edges, error
 
 		return np.vstack([newy, newx, edges, fracs]).T, transedges, error
 
@@ -487,12 +518,13 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 	rides = uber_df['ride'].unique()
 	transedges_array = np.array([])
 	for ride in rides:
-		tmp, transedges, error = dftransform(uber_df[uber_df['ride'] == ride])
-		uber_df.ix[uber_df['ride'] == ride,['y','x','edge','fraction']] = tmp
-		if error == 1:
-			uber_df = uber_df[uber_df['ride'] != ride]
-		else:
-			transedges_array = np.hstack([transedges_array,transedges])
+		if len(uber_df[uber_df['ride'] == ride]) > 1:
+			tmp, transedges, error = dftransform(uber_df[uber_df['ride'] == ride])
+			uber_df.ix[uber_df['ride'] == ride,['y','x','edge','fraction']] = tmp
+			if error == 1:
+				uber_df = uber_df[uber_df['ride'] != ride]
+			else:
+				transedges_array = np.hstack([transedges_array,transedges])
 	uber_df['trans_edge'] = transedges_array
 	# update x and y
 	return uber_df
@@ -560,46 +592,61 @@ def get_features(df):
 # 	for edge,group in grouped:
 
 def main():
+	from_pickle = 1
+
+	xmax = -122.417
+	xmin = -122.420
+	ymin = 37.76181
+	ymax = 37.7655
+
 	uber_df = load_uber() # resample to every 2 seconds
-	print 'read uber_df'
+	print 'loaded uber_df'
 
-	uber_df = uber_df[uber_df['x'] >= -122.43]
-	uber_df = uber_df[uber_df['x'] <= -122.40]
-	uber_df = uber_df[uber_df['y'] >= 37.735]
-	uber_df = uber_df[uber_df['y'] <= 37.765]
+	uber_df = uber_df[uber_df['x'] >= xmin]
+	uber_df = uber_df[uber_df['x'] <= xmax]
+	uber_df = uber_df[uber_df['y'] >= ymin]
+	uber_df = uber_df[uber_df['y'] <= ymax]
 
-	# street_df = load_streets(n=0)
-	street_df = pickle.load(open('pickles/street_df.pkl','rb'))
-	print 'read street df'
+	if from_pickle:
+		street_df = pickle.load(open('pickles/street_df.pkl','rb'))
+		print 'read street df'
+		street_df = street_df = street_df[(street_df['xstart'] >= xmin) & (street_df['xstart'] <= xmax) &
+			(street_df['xstop'] >= xmin) & (street_df['xstop'] <= xmax) &
+			(street_df['ystart'] >= ymin) & (street_df['ystart'] <= ymax) &
+			(street_df['ystop'] >= ymin) & (street_df['ystop'] <= ymax)]
 
-	street_df = street_df = street_df[(street_df['xstart'] >= -122.43) & (street_df['xstart'] <= -122.40) &
-			(street_df['xstop'] >= -122.43) & (street_df['xstop'] <= -122.40) &
-			(street_df['ystart'] >= 37.735) & (street_df['ystart'] <= 37.765) &
-			(street_df['ystop'] >= 37.735) & (street_df['ystop'] <= 37.765)]
+		street_graph = pickle.load(open('pickles/street_graph.pkl','rb'))
+		node_coord_dict = pickle.load(open('pickles/node_coord_dict.pkl','rb'))
+		coord_node_dict = pickle.load(open('pickles/coord_node_dict.pkl','rb'))
+		edge_dict = pickle.load(open('pickles/edge_dict.pkl','rb'))
+		coord_lookup = pickle.load(open('pickles/coord_lookup.pkl','rb'))
+		print 'read street graph'
 
-	street_graph, node_coord_dict, coord_node_dict, edge_dict, coord_lookup = create_graph(street_df)
-	# pickle.dump(street_graph,open('pickles/street_graph.pkl','wb'))
-	# pickle.dump(node_coord_dict,open('pickles/node_coord_dict.pkl','wb'))
-	# pickle.dump(coord_node_dict,open('pickles/coord_node_dict.pkl','wb'))
-	# pickle.dump(edge_dict,open('pickles/edge_dict.pkl','wb'))
-	# pickle.dump(coord_lookup,open('pickles/coord_lookup.pkl','wb'))
-	print 'computed street graph'
-	# street_graph = pickle.load(open('pickles/street_graph.pkl','rb'))
-	# node_coord_dict = pickle.load(open('pickles/node_coord_dict.pkl','rb'))
-	# coord_node_dict = pickle.load(open('pickles/coord_node_dict.pkl','rb'))
-	# edge_dict = pickle.load(open('pickles/edge_dict.pkl','rb'))
-	# coord_lookup = pickle.load(open('pickles/coord_lookup.pkl','rb'))
-	# print 'read street graph'
+		transition_graph = pickle.load(open('pickles/transition_graph.pkl','rb'))
+		trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
+		print 'read transition graph'
+	else:
+		street_df = load_streets(n=0)
+		street_df = street_df = street_df[(street_df['xstart'] >= xmin) & (street_df['xstart'] <= xmax) &
+			(street_df['xstop'] >= xmin) & (street_df['xstop'] <= xmax) &
+			(street_df['ystart'] >= ymin) & (street_df['ystart'] <= ymax) &
+			(street_df['ystop'] >= ymin) & (street_df['ystop'] <= ymax)]
+		print 'loaded street df'
 
-	transition_graph, trans_dict = create_transition_graph(street_graph, node_coord_dict, edge_dict)
-	# pickle.dump(transition_graph,open('pickles/transition_graph.pkl','wb'))
-	# pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
-	print 'computed transition graph'
-	# transition_graph = pickle.load(open('pickles/transition_graph.pkl','rb'))
-	# trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
-	# print 'read transition graph'
-
-	uber_df = project(uber_df, street_graph, transition_graph, node_dict, edge_dict, trans_dict, coord_lookup)
+		street_graph, node_coord_dict, coord_node_dict, edge_dict, coord_lookup = create_graph(street_df)
+		pickle.dump(street_graph,open('pickles/street_graph.pkl','wb'))
+		pickle.dump(node_coord_dict,open('pickles/node_coord_dict.pkl','wb'))
+		pickle.dump(coord_node_dict,open('pickles/coord_node_dict.pkl','wb'))
+		pickle.dump(edge_dict,open('pickles/edge_dict.pkl','wb'))
+		pickle.dump(coord_lookup,open('pickles/coord_lookup.pkl','wb'))
+		print 'computed street graph'
+	
+		transition_graph, trans_dict = create_transition_graph(street_graph, node_coord_dict, edge_dict)
+		pickle.dump(transition_graph,open('pickles/transition_graph.pkl','wb'))
+		pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
+		print 'computed transition graph'
+	
+	uber_df = project(uber_df, street_graph, transition_graph, node_coord_dict, edge_dict, trans_dict, coord_lookup)
 	pickle.dump(uber_df,open('pickles/uber_df_projected.pkl','wb'))
 	print 'projected uber onto streets'
 	print 'DONE'
