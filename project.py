@@ -10,6 +10,7 @@ import ast
 import time
 import sys
 import pickle
+import ipdb
 # import psycopg2 as psycho
 
 from pygeocoder import Geocoder, GeocoderError
@@ -197,7 +198,7 @@ def trunc(f, n=2):
     return str(f)[:slen]
 
 def create_graph(df):
-	G=nx.DiGraph()
+	G=nx.DiGraph().to_directed()
 	edge_dict = {}
 	node_count = 0
 	node_coord_dict = {}
@@ -260,7 +261,7 @@ def create_graph(df):
 
 		if node_coord_dict[start_node] != node_coord_dict[stop_node]:
 			if street['oneway'] != 'T':
-				G.add_edge(start_node, stop_node)
+				G.add_path([start_node, stop_node])
 				edge_dict[(start_node, stop_node)] = [street['name']]
 				for key in keys:
 					if key in coord_lookup.keys():
@@ -269,7 +270,7 @@ def create_graph(df):
 						coord_lookup[key] = [(start_node, stop_node)]
 
 			if street['oneway'] != 'F':
-				G.add_edge(stop_node, start_node)
+				G.add_path([stop_node, start_node])
 				edge_dict[(stop_node, start_node)] = [street['name']]
 				for key in keys:
 					if key in coord_lookup.keys():
@@ -302,7 +303,7 @@ def shorten_edge(coord, length, unit_vec):
 	return start_coord, stop_coord
 
 def create_transition_graph(G, node_dict, edge_dict):
-	newG = nx.DiGraph()
+	newG = nx.DiGraph().to_directed()
 	start_dict = {}
 	stop_dict = {}
 	trans_dict = {}
@@ -311,7 +312,7 @@ def create_transition_graph(G, node_dict, edge_dict):
 	for edge in G.edges_iter():
 		new_edge = shorten_edge(node_dict[edge[0]], edge_dict[edge][1], edge_dict[edge][2])
 		trans_dict[edge] = new_edge
-		newG.add_edge(*new_edge, weight=9999)
+		newG.add_path([new_edge[0], new_edge[1]], weight=9999)
 		if edge[0] in start_dict:
 			start_dict[edge[0]].append(new_edge[0])
 		else:
@@ -321,7 +322,7 @@ def create_transition_graph(G, node_dict, edge_dict):
 	for newstop, oldstop in stop_dict.iteritems():
 		if oldstop in start_dict:
 			for newstart in start_dict[oldstop]:
-				newG.add_edge(newstop, newstart, weight=9999)
+				newG.add_path([newstop, newstart], weight=0)
 
 	return newG, trans_dict
 
@@ -335,19 +336,148 @@ def point_to_line(point, start, stop, edge_len, edge_vec):
 	return dist, frac
 
 def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
-	def find_nearest_street(data):
-		edges = coord_lookup[(trunc(data[0],2),trunc(data[1],2))]
+	def mapping(data):
+		broken_chain = np.ones(len(data))
+		edges = []
+		fracs = []
+		for i in xrange(len(data)):
+			row = data.iloc[i]
+			if broken_chain[i] == 1:
+				lookup_edges = coord_lookup[(trunc(row['x'],2),trunc(row['y'],2))]
+				edge1, frac1 = find_nearest_street(row['x'], row['y'], lookup_edges)
+				if i < len(data)-2:
+					x2 = data.iloc[i+1]['x']
+					y2 = data.iloc[i+1]['y']
+
+					lookup_edges = set(nx.ego_graph(G=G,n=edge1[1],radius=2).edges())
+					lookup_edges = lookup_edges.union(set(nx.ego_graph(G=G,n=edge1[0],radius=2).edges()))
+					lookup_edges.add(edge1)
+
+					edge2, frac2 = find_nearest_street(x2, y2, lookup_edges)
+					if edge1 == edge2:
+						broken_chain[i+1] = 0
+						if frac1 < frac2:
+							edges.append(edge1)
+							fracs.append(frac1)
+						else:
+							proposed_edge1 = (edge1[1], edge1[0])
+							if proposed_edge1 in edge_dict:
+								edges.append(proposed_edge1)
+								fracs.append(1-frac1)
+							else:
+								edges.append(edge1)
+								fracs.append(frac1)
+					elif edge1 == (edge2[1], edge2[0]):
+						broken_chain[i+1] = 0
+						if frac1 < 1-frac2:
+							edges.append(edge1)
+							fracs.append(frac1)
+						else:
+							proposed_edge1 = (edge1[1], edge1[0])
+							if proposed_edge1 in edge_dict:
+								edges.append(proposed_edge1)
+								fracs.append(1-frac1)
+					elif (edge1[0] == edge2[0]) or (edge1[0] == edge2[1]):
+						proposed_edge1 = (edge1[1], edge1[0])
+						if proposed_edge1 in edge_dict:
+							broken_chain[i+1] = 0
+							edges.append(proposed_edge1)
+							fracs.append(1-frac1)
+						else:
+							edges.append(edge1)
+							fracs.append(frac1)
+					elif (edge1[1] == edge2[0]) or (edge1[1] == edge2[1]):
+						broken_chain[i+1] = 0
+						edges.append(edge1)
+						fracs.append(frac1)
+					else:
+						edges.append(edge1)
+						fracs.append(frac1)
+				else:
+					edges.append(edge1)
+					fracs.append(frac1)
+			else: # not broken chain, can be confident in start node if correct for directionality
+				edge0 = edges[i-1]
+				frac0 = fracs[i-1]
+				
+				lookup_edges = set(nx.ego_graph(G=G,n=edge0[1],radius=2).edges())
+				lookup_edges.add(edge0)
+				edge_reverse = (edge0[1], edge0[0])
+				lookup_edges.discard(edge_reverse)
+
+				edge1, frac1 = find_nearest_street(row['x'], row['y'], lookup_edges)
+				stopnode = -1
+				if edge0 == edge1:
+					edges.append(edge1)
+					fracs.append(frac1)
+					startnode = edge1[0]
+					stopnode = edge1[1]
+				elif edge0 == (edge1[1],edge1[0]):
+					edges.append(edge0)
+					fracs.append(1-frac1)
+					startnode = edge1[1]
+					stopnode = edge1[0]
+					edge1 = (startnode, stopnode)
+				elif edge0[1] == edge1[0]:
+					startnode = edge1[0]
+				else:
+					startnode = edge1[1]
+					ipdb.set_trace()
+					lookup_edges = set(nx.ego_graph(G=G,n=startnode,radius=1).edges())
+					edge1, frac1 = find_nearest_street(row['x'], row['y'], lookup_edges)
+
+				if stopnode == -1:
+					if i < len(data)-2:
+						x2 = data.iloc[i+1]['x']
+						y2 = data.iloc[i+1]['y']
+						
+						lookup_edges = set(nx.ego_graph(G=G,n=edge1[1],radius=2).edges())
+						lookup_edges.add(edge1)
+						edge_reverse = (edge1[1], edge1[0])
+						lookup_edges.discard(edge_reverse)
+
+						edge2, frac2 = find_nearest_street(x2, y2, lookup_edges)
+						if edge1 == edge2:
+							broken_chain[i+1] = 0
+							edges.append(edge1)
+							fracs.append(frac1)
+						elif edge1[1] == edge2[0]:
+							broken_chain[i+1] = 0
+							edges.append(edge1)
+							fracs.append(frac1)
+						elif edge1[1] == edge2[1]:
+							broken_chain[i+1] = 0
+							edges.append(edge1)
+							fracs.append(frac1)
+						else:
+							proposed_edges1 = [(startnode, edge2[0]), (startnode, edge2[1])]
+							if proposed_edges1[0] in edge_dict:
+								broken_chain[i+1] = 0
+								edges.append(proposed_edges1[0])
+								fracs.append(0.5)
+							elif proposed_edges1[1] in edge_dict:
+								broken_chain[i+1] = 0
+								edges.append(proposed_edges1[1])
+								fracs.append(0.5)
+							else:
+								edges.append(edge1)
+								fracs.append(frac1)
+		data['edge'] = edges
+		data['fraction'] = fracs
+		return data
+
+	def find_nearest_street(x, y, edges):
 		min_dist = 9999
 		for edge in edges:
 			coord1 = node_dict[edge[0]]
 			coord2 = node_dict[edge[1]]
-			dist, frac = point_to_line(data, coord1, coord2, edge_dict[edge][1], edge_dict[edge][2])
+			dist, frac = point_to_line((x, y), coord1, coord2, edge_dict[edge][1], edge_dict[edge][2])
 			if dist < min_dist and (frac >= 0 and frac <= 1):
 				min_dist = dist
 				min_edge = edge
 				min_frac = frac
 
-		return pd.Series([min_edge, min_frac])
+		return min_edge, min_frac
 
 	def voting(edges, fracs):
 		broken_chain = np.ones(len(edges))
@@ -530,6 +660,9 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 
 		return np.vstack([newy, newx, edges, fracs]).T, transedges, error, troublemakers
 
+	uber_df = uber_df.groupby('ride').apply(mapping)
+	#for ride in rides:
+
 	tmp = uber_df[['x','y']].apply(find_nearest_street, axis=1)
 	print 'found nearest edges'
 
@@ -624,7 +757,7 @@ def get_clusters(X, n=4):
 # 	for edge,group in grouped:
 
 def main():
-	from_pickle = 1
+	from_pickle = 0
 
 	xmax = -122.417
 	xmin = -122.420
@@ -658,7 +791,8 @@ def main():
 		trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
 		print 'read transition graph'
 	else:
-		street_df = load_streets(n=0)
+		# street_df = load_streets(n=0)
+		street_df = pickle.load(open('pickles/street_df.pkl','rb'))
 		street_df = street_df = street_df[(street_df['xstart'] >= xmin) & (street_df['xstart'] <= xmax) &
 			(street_df['xstop'] >= xmin) & (street_df['xstop'] <= xmax) &
 			(street_df['ystart'] >= ymin) & (street_df['ystart'] <= ymax) &
@@ -679,11 +813,11 @@ def main():
 		print 'computed transition graph'
 	
 	''' apply Kalman filter first pass here, fix large errors '''
-
+	
 	uber_df = project(uber_df, street_graph, transition_graph, node_coord_dict, edge_dict, trans_dict, coord_lookup)
 	pickle.dump(uber_df,open('pickles/uber_df_projected.pkl','wb'))
 	print 'projected uber onto streets'
-
+	
 	''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
 	
 	uber_df = uber_df.join(compute_speed(uber_df))
@@ -701,6 +835,7 @@ def main():
 
 		uber_df['cluster'] = clusters
 
+	'''
 	xx, yy = np.meshgrid(rush_hour_flags,np.arange(4))
 	for flag, cluster in zip(flatten(xx),flatten(yy)):
 		clone_graph = transition_graph
@@ -710,7 +845,7 @@ def main():
 		for edge in edges:
 			i = some_trans_graph_dictionary(???)[edge]
 			clone_graph.edges()[i]['weight'] = edge_speed_df[edge]
-
+	'''
 	# 		for i, edge in clone_graph.edges_iter():
 	# 			edge['weight'] = compute_edge_weight(flag_df,edge)
 	
