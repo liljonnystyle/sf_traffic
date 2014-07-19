@@ -38,6 +38,9 @@ def deriv(x):
 def dparser(datestring):
 	return datetime.datetime.strptime(datestring,'%Y-%m-%dT%H:%M:%S+00:00')
 
+'''
+load uber coord data from csv into DataFrame
+'''
 def load_uber(nlines=-1):
 	column_names = ['ride', 'datetime', 'y', 'x']
 	uber_df = pd.read_csv('uber_data/all.tsv', sep='\t', header=None, names=column_names,
@@ -53,6 +56,9 @@ def load_uber(nlines=-1):
 	# resample to every 2 seconds
 	return uber_df.iloc[:nlines]
 
+'''
+load street geo data from json into DataFrame
+'''
 def load_streets(n=0):
 	with open('street_centerlines/stclines_streets.json') as f:
 		streets = json.loads(f.read())
@@ -78,6 +84,10 @@ def load_streets(n=0):
 	# ystops = np.zeros((nstreets,1))
 
 	if n == 0:
+		'''
+		prepare input file for fortran program to convert state plane
+		coordinates to lat long coordinates
+		'''
 		file81 = open('nad83/input.81','wb')
 		for i, row in df.iterrows():
 			xstart = int(row['xstart']*304.80061)
@@ -89,6 +99,10 @@ def load_streets(n=0):
 			output = '      *81*                                  %10d%11d0403\n' % (xstop, ystop)
 			file81.write(output)
 	else:
+		'''
+		parse fortran program output of lat long coordinates
+		write into DataFrame
+		'''
 		file80 = open('nad83/output.80','rb')
 		for i, row in df.iterrows():
 			line = file80.readline()
@@ -192,11 +206,16 @@ def load_streets(n=0):
 
 	return df
 
+'''
+Truncates/pads a float f to n decimal places without rounding
+'''
 def trunc(f, n=2):
-    '''Truncates/pads a float f to n decimal places without rounding'''
     slen = len('%.*f' % (n, f))
     return str(f)[:slen]
 
+'''
+Create directed street network graph from street DataFrame
+'''
 def create_graph(df):
 	G=nx.DiGraph().to_directed()
 	edge_dict = {}
@@ -290,11 +309,19 @@ def create_graph(df):
 	'''
 	return G, node_coord_dict, coord_node_dict, edge_dict, coord_lookup
 
+'''
+INPUT: start and stop coordinates of a vector
+OUTPUT: length and unit vector
+'''
 def edge_eval(start, stop):
 	length = ((start[0] - stop[0])**2 + (start[1] - stop[1])**2)**0.5
 	unit_vec = np.array([(stop[0] - start[0])/length, (stop[1] - start[1])/length])
 	return length, unit_vec
 
+'''
+INPUT: start/stop coordinates (as a tuple), length, and unit vector
+OUTPUT: new vector shortened to 1%-90% of original vector
+'''
 def shorten_edge(coord, length, unit_vec):
 	# could actually just compute full vector here...
 	# but length and unit_vec give more flexibility for later changes
@@ -302,6 +329,10 @@ def shorten_edge(coord, length, unit_vec):
 	stop_coord = (coord[0]+unit_vec[0]*length*0.9, coord[1]+unit_vec[1]*length*0.9)
 	return start_coord, stop_coord
 
+'''
+INPUT: original street graph, node-to-coordinates dictionary, edge dictionary
+OUTPUT: new directed graph with shortened street edges and new transition edges
+'''
 def create_transition_graph(G, node_dict, edge_dict):
 	newG = nx.DiGraph().to_directed()
 	start_dict = {}
@@ -326,6 +357,10 @@ def create_transition_graph(G, node_dict, edge_dict):
 
 	return newG, trans_dict
 
+'''
+find perpendicular distance from point to line
+find fraction along vector of projected point
+'''
 def point_to_line(point, start, stop, edge_len, edge_vec):
 	startpoint_len, startpoint_vec = edge_eval(start, point)
 	cosang = np.dot(edge_vec, startpoint_vec)
@@ -335,6 +370,9 @@ def point_to_line(point, start, stop, edge_len, edge_vec):
 	frac = startpoint_len * cosang / edge_len
 	return dist, frac
 
+'''
+project coordinates onto street graph, and then onto transition graph
+'''
 def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 	def mapping(data):
 		broken_chain = np.ones(len(data))
@@ -716,6 +754,9 @@ def compute_accel(uber_df):
 		count += 1
 	return acceldf
 
+'''
+create rush hour flag column in Uber DataFrame
+'''
 def subset_flag_df(uber_df):
 	reindexed_df = uber_df.set_index('datetime')
 	reindexed_df['rush_hour'] = None
@@ -738,12 +779,18 @@ def get_features(df):
 	X['avg_decel'] = df[df['accel']<0].groupby('ride')['accel'].mean()
 	X['med_decel'] = df[df['accel']<0].groupby('ride')['accel'].median()
 
+	'''
+	mean free path: average time driving in between stops (aka zero velocity timestamps)
+	'''
 	def mfp(data):
 		nz = np.nonzero(np.append(0,data['speed']))
 		return 4.0*sum(nz)/len(np.where(np.diff(nz) == 1)[0]) #mean free path in seconds
 	X['mfp'] = df[['ride','speed','time']].groupby('ride').apply(mfp)
 	return X
 
+'''
+compute kmeans clusters
+'''
 def get_clusters(X, n=4):
 # 	distxy = squareform(pdist(X_scaled, metric='euclidean'))
 # 	linkage(distxy, method='complete')
