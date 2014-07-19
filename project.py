@@ -284,18 +284,18 @@ def create_graph(df):
 				edge_dict[(start_node, stop_node)] = [street['name']]
 				for key in keys:
 					if key in coord_lookup.keys():
-						coord_lookup[key].append((start_node, stop_node))
+						coord_lookup[key].add((start_node, stop_node))
 					else:
-						coord_lookup[key] = [(start_node, stop_node)]
+						coord_lookup[key] = set([(start_node, stop_node)])
 
 			if street['oneway'] != 'F':
 				G.add_path([stop_node, start_node])
 				edge_dict[(stop_node, start_node)] = [street['name']]
 				for key in keys:
 					if key in coord_lookup.keys():
-						coord_lookup[key].append((stop_node, start_node))
+						coord_lookup[key].add((stop_node, start_node))
 					else:
-						coord_lookup[key] = [(stop_node, start_node)]
+						coord_lookup[key] = set([(stop_node, start_node)])
 
 	for edge in G.edges_iter():
 		node1 = node_coord_dict[edge[0]]
@@ -374,24 +374,45 @@ def point_to_line(point, start, stop, edge_len, edge_vec):
 project coordinates onto street graph, and then onto transition graph
 '''
 def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
+
+	''' does what set(nx.ego_graph(G,node,radius).edges()) should do '''
+	def get_lookup_edges(G,node,radius):
+		if radius == 1:
+			return set([(node, neigh) for neigh in G.neighbors(node)])
+		if radius > 1:
+			lookup_edges = set([(node, neigh) for neigh in G.neighbors(node)])
+			for neigh in G.neighbors(node):
+				tmp = get_lookup_edges(G,neigh,radius-1)
+				lookup_edges = lookup_edges.union(tmp)
+			return lookup_edges
+		else:
+			return set()
+
 	def mapping(data):
 		broken_chain = np.ones(len(data))
 		edges = []
 		fracs = []
+		# if data.iloc[0]['ride'] == 317:
+		# 	ipdb.set_trace()
 		for i in xrange(len(data)):
 			row = data.iloc[i]
 			if broken_chain[i] == 1:
 				lookup_edges = coord_lookup[(trunc(row['x'],2),trunc(row['y'],2))]
-				edge1, frac1 = find_nearest_street(row['x'], row['y'], lookup_edges)
+				edge1, frac1, searching = find_nearest_street(row['x'], row['y'], lookup_edges)
 				if i < len(data)-2:
 					x2 = data.iloc[i+1]['x']
 					y2 = data.iloc[i+1]['y']
 
-					lookup_edges = set(nx.ego_graph(G=G,n=edge1[1],radius=2).edges())
-					lookup_edges = lookup_edges.union(set(nx.ego_graph(G=G,n=edge1[0],radius=2).edges()))
-					lookup_edges.add(edge1)
+					searching = 1
+					radius = 0
+					lookup_edges = set()
+					while searching:
+						radius += 1
+						lookup_edges_new = get_lookup_edges(G,edge1[1],radius)
+						lookup_edges_new = lookup_edges_new.union(get_lookup_edges(G,edge1[0],radius))
+						lookup_edges = lookup_edges_new.difference(lookup_edges)
+						edge2, frac2, searching = find_nearest_street(x2, y2, lookup_edges)
 
-					edge2, frac2 = find_nearest_street(x2, y2, lookup_edges)
 					if edge1 == edge2:
 						broken_chain[i+1] = 0
 						if frac1 < frac2:
@@ -438,12 +459,11 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 				edge0 = edges[i-1]
 				frac0 = fracs[i-1]
 				
-				lookup_edges = set(nx.ego_graph(G=G,n=edge0[1],radius=2).edges())
+				lookup_edges = get_lookup_edges(G,edge0[1],1)
 				lookup_edges.add(edge0)
 				edge_reverse = (edge0[1], edge0[0])
 				lookup_edges.discard(edge_reverse)
-
-				edge1, frac1 = find_nearest_street(row['x'], row['y'], lookup_edges)
+				edge1, frac1, searching = find_nearest_street(row['x'], row['y'], lookup_edges)
 				stopnode = -1
 				if edge0 == edge1:
 					edges.append(edge1)
@@ -460,21 +480,25 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 					startnode = edge1[0]
 				else:
 					startnode = edge1[1]
-					ipdb.set_trace()
-					lookup_edges = set(nx.ego_graph(G=G,n=startnode,radius=1).edges())
-					edge1, frac1 = find_nearest_street(row['x'], row['y'], lookup_edges)
+					lookup_edges = get_lookup_edges(G,startnode,1)
+					edge1, frac1, searching = find_nearest_street(row['x'], row['y'], lookup_edges)
 
 				if stopnode == -1:
-					if i < len(data)-2:
+					if i <= len(data)-2:
 						x2 = data.iloc[i+1]['x']
 						y2 = data.iloc[i+1]['y']
 						
-						lookup_edges = set(nx.ego_graph(G=G,n=edge1[1],radius=2).edges())
-						lookup_edges.add(edge1)
-						edge_reverse = (edge1[1], edge1[0])
-						lookup_edges.discard(edge_reverse)
+						searching = 1
+						radius = 0
+						lookup_edges = set()
+						while searching:
+							radius += 1
+							lookup_edges_new = get_lookup_edges(G,startnode,radius)
+							lookup_edges = lookup_edges_new.difference(lookup_edges)
+							edge_reverse = (edge1[1], edge1[0])
+							lookup_edges.discard(edge_reverse)
+							edge2, frac2, searching = find_nearest_street(x2, y2, lookup_edges)
 
-						edge2, frac2 = find_nearest_street(x2, y2, lookup_edges)
 						if edge1 == edge2:
 							broken_chain[i+1] = 0
 							edges.append(edge1)
@@ -500,6 +524,10 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 							else:
 								edges.append(edge1)
 								fracs.append(frac1)
+					else:
+						edges.append(edge1)
+						fracs.append(frac1)
+
 		data['edge'] = edges
 		data['fraction'] = fracs
 		return data
@@ -514,165 +542,167 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 				min_dist = dist
 				min_edge = edge
 				min_frac = frac
+		if min_dist == 9999:
+			return (0,0), 0, 1
+		else:
+			return min_edge, min_frac, 0
 
-		return min_edge, min_frac
+	# def voting(edges, fracs):
+	# 	broken_chain = np.ones(len(edges))
+	# 	troublemakers = set()
+	# 	for i, edge in enumerate(edges[:-1]):
+	# 		if broken_chain[i]:
+	# 			if (edge == edges[i+1]):
+	# 				broken_chain[i+1] = 0
+	# 				if fracs[i] > fracs[i+1]: # if subsequent edges match, but going wrong direction
+	# 					if (edges[i][1], edges[i][0]) in edge_dict:
+	# 						edges[i] = (edges[i][1], edges[i][0])
+	# 						fracs[i] = 1-fracs[i]
+	# 						edges[i+1] = edges[i]
+	# 						fracs[i+1] = 1-fracs[i+1]
+	# 					else:
+	# 						troublemakers.add(i)
+	# 						troublemakers.add(i+1)
+	# 			elif (edge[0] == edges[i+1][1]) & (edge[1] == edges[i+1][0]): # if subsequent edges flip/flop
+	# 				broken_chain[i+1] = 0
+	# 				if fracs[i] > 1-fracs[i+1]: # 0 is wrong, 1 is right
+	# 					edges[i] = edges[i+1]
+	# 					fracs[i] = 1-fracs[i]
+	# 			else:
+	# 				for j in xrange(i+1,len(edges)):
+	# 					if edge[0] == edges[j][0]:
+	# 						broken_chain[j] = 0
+	# 						if (edges[i][1], edges[i][0]) in edge_dict:
+	# 							edges[i] = (edges[i][1], edges[i][0])
+	# 							fracs[i] = 1-fracs[i]
+	# 						else:
+	# 							troublemakers.add(i)
+	# 						break
+	# 					elif edge[0] == edges[j][1]:
+	# 						broken_chain[j] = 0
+	# 						if (edges[i][1], edges[i][0]) in edge_dict:
+	# 							edges[i] = (edges[i][1], edges[i][0])
+	# 							fracs[i] = 1-fracs[i]
+	# 						else:
+	# 							troublemakers.add(i)
+	# 						if (edges[j][1], edges[j][0]) in edge_dict:
+	# 							edges[j] = (edges[j][1], edges[j][0])
+	# 							fracs[j] = 1-fracs[j]
+	# 						else:
+	# 							troublemakers.add(j)
+	# 						break
+	# 					elif edge[1] == edges[j][1]:
+	# 						broken_chain[j] = 0
+	# 						if (edges[j][1], edges[j][0]) in edge_dict:
+	# 							edges[j] = (edges[j][1], edges[j][0])
+	# 							fracs[j] = 1-fracs[j]
+	# 						else:
+	# 							troublemakers.add(j)
+	# 						break
+	# 		else:
+	# 			for j in xrange(i+1,len(edges)):
+	# 				if edge != edges[j]:
+	# 					if (edge[0] == edges[i+1][1]) & (edge[1] == edges[i+1][0]): # if subsequent edges flip/flop
+	# 						broken_chain[j] = 0
+	# 						edges[j] = edges[i]
+	# 						fracs[j] = 1-fracs[j]
+	# 					else:
+	# 						if edge[1] == edges[j][1]:
+	# 							broken_chain[j] = 0
+	# 							if (edges[j][1], edges[j][0]) in edge_dict:
+	# 								edges[j] = (edges[j][1], edges[j][0])
+	# 								fracs[j] = 1-fracs[j]
+	# 							else:
+	# 								troublemakers.add(j)
+	# 							break
+	# 						else:
+	# 							break
+	# 	return edges, fracs, troublemakers
 
-	def voting(edges, fracs):
-		broken_chain = np.ones(len(edges))
-		troublemakers = set()
-		for i, edge in enumerate(edges[:-1]):
-			if broken_chain[i]:
-				if (edge == edges[i+1]):
-					broken_chain[i+1] = 0
-					if fracs[i] > fracs[i+1]: # if subsequent edges match, but going wrong direction
-						if (edges[i][1], edges[i][0]) in edge_dict:
-							edges[i] = (edges[i][1], edges[i][0])
-							fracs[i] = 1-fracs[i]
-							edges[i+1] = edges[i]
-							fracs[i+1] = 1-fracs[i+1]
-						else:
-							troublemakers.add(i)
-							troublemakers.add(i+1)
-				elif (edge[0] == edges[i+1][1]) & (edge[1] == edges[i+1][0]): # if subsequent edges flip/flop
-					broken_chain[i+1] = 0
-					if fracs[i] > 1-fracs[i+1]: # 0 is wrong, 1 is right
-						edges[i] = edges[i+1]
-						fracs[i] = 1-fracs[i]
-				else:
-					for j in xrange(i+1,len(edges)):
-						if edge[0] == edges[j][0]:
-							broken_chain[j] = 0
-							if (edges[i][1], edges[i][0]) in edge_dict:
-								edges[i] = (edges[i][1], edges[i][0])
-								fracs[i] = 1-fracs[i]
-							else:
-								troublemakers.add(i)
-							break
-						elif edge[0] == edges[j][1]:
-							broken_chain[j] = 0
-							if (edges[i][1], edges[i][0]) in edge_dict:
-								edges[i] = (edges[i][1], edges[i][0])
-								fracs[i] = 1-fracs[i]
-							else:
-								troublemakers.add(i)
-							if (edges[j][1], edges[j][0]) in edge_dict:
-								edges[j] = (edges[j][1], edges[j][0])
-								fracs[j] = 1-fracs[j]
-							else:
-								troublemakers.add(j)
-							break
-						elif edge[1] == edges[j][1]:
-							broken_chain[j] = 0
-							if (edges[j][1], edges[j][0]) in edge_dict:
-								edges[j] = (edges[j][1], edges[j][0])
-								fracs[j] = 1-fracs[j]
-							else:
-								troublemakers.add(j)
-							break
-			else:
-				for j in xrange(i+1,len(edges)):
-					if edge != edges[j]:
-						if (edge[0] == edges[i+1][1]) & (edge[1] == edges[i+1][0]): # if subsequent edges flip/flop
-							broken_chain[j] = 0
-							edges[j] = edges[i]
-							fracs[j] = 1-fracs[j]
-						else:
-							if edge[1] == edges[j][1]:
-								broken_chain[j] = 0
-								if (edges[j][1], edges[j][0]) in edge_dict:
-									edges[j] = (edges[j][1], edges[j][0])
-									fracs[j] = 1-fracs[j]
-								else:
-									troublemakers.add(j)
-								break
-							else:
-								break
-		return edges, fracs, troublemakers
+	# def check_edges(edges, fracs, ride):
+	# 	error = 0
+	# 	lr = LinearRegression()
 
-	def check_edges(edges, fracs, ride):
-		error = 0
-		lr = LinearRegression()
+	# 	newedges = np.array(edges)
+	# 	newfracs = np.array(fracs)
+	# 	for i, edge in enumerate(edges):
+	# 		if i != 0:
+	# 			if edge == oldedge:
+	# 				curr_inds.append(i)
+	# 			else:
+	# 				inds = np.where(edges == oldedge)[0]
+	# 				x = np.arange(len(inds))[:,np.newaxis]
+	# 				y = np.array(np.array(fracs)[inds])
+	# 				try:
+	# 					lr.fit(x,y)
+	# 				except AttributeError:
+	# 					print x, type(x)
+	# 					print y, type(y)
+	# 				if lr.coef_[0] < 0:
+	# 					newedge = (oldedge[1], oldedge[0])
+	# 					if newedge in G.nodes():
+	# 						for j in curr_inds:
+	# 							newedges[j] = newedge
+	# 							newfracs[j] = 1 - fracs[j]
+	# 					else:
+	# 						print 'ride ' + str(ride) + ' can not reverse edge ' + str(edge)
+	# 						error = 1
+	# 						return edges, fracs, error
+	# 				oldedge = edge
+	# 				curr_inds = [i]
+	# 		else:
+	# 			oldedge = edge
+	# 			curr_inds = [i]
 
-		newedges = np.array(edges)
-		newfracs = np.array(fracs)
-		for i, edge in enumerate(edges):
-			if i != 0:
-				if edge == oldedge:
-					curr_inds.append(i)
-				else:
-					inds = np.where(edges == oldedge)[0]
-					x = np.arange(len(inds))[:,np.newaxis]
-					y = np.array(np.array(fracs)[inds])
-					try:
-						lr.fit(x,y)
-					except AttributeError:
-						print x, type(x)
-						print y, type(y)
-					if lr.coef_[0] < 0:
-						newedge = (oldedge[1], oldedge[0])
-						if newedge in G.nodes():
-							for j in curr_inds:
-								newedges[j] = newedge
-								newfracs[j] = 1 - fracs[j]
-						else:
-							print 'ride ' + str(ride) + ' can not reverse edge ' + str(edge)
-							error = 1
-							return edges, fracs, error
-					oldedge = edge
-					curr_inds = [i]
-			else:
-				oldedge = edge
-				curr_inds = [i]
+	# 	for i, edge in enumerate(newedges):
+	# 		if i != 0:
+	# 			if edge != oldedge:
+	# 				if edge[0] != oldedge[1]:
+	# 					print 'ride ' + str(ride) + ' node match error:'
+	# 					print '\t' + str(oldedge) + ' & ' + str(edge)
+	# 					error = 1
+	# 					return edges, fracs, error
+	# 		oldedge = edge
+	# 	return newedges, newfracs, error
 
-		for i, edge in enumerate(newedges):
-			if i != 0:
-				if edge != oldedge:
-					if edge[0] != oldedge[1]:
-						print 'ride ' + str(ride) + ' node match error:'
-						print '\t' + str(oldedge) + ' & ' + str(edge)
-						error = 1
-						return edges, fracs, error
-			oldedge = edge
-		return newedges, newfracs, error
+	# def get_trans_edges(edges, fracs, ride):
+	# 	transedges = np.array(edges)
+	# 	error = 0
+	# 	for i, frac in enumerate(fracs):
+	# 		tmp = trans_dict[edges[i]]
+	# 		if frac < 0.01: # beginning of edge, go backwards to find previous edge
+	# 			check = 0
+	# 			for j in xrange(i-1, 0, -1):
+	# 				if edges[i] != edges[j]:
+	# 					transedges[i] = (trans_dict[edges[j]][1],tmp[0])
+	# 					check = 1
+	# 					break
+	# 			if check == 0: # got to beginning of series with no previous edge, assign any trans edge that matches
+	# 				for edge_it in G.edges_iter():
+	# 					if edge_it[1] == edges[i][0]:
+	# 						transedges[i] = (trans_dict[edge_it][1],tmp[0])
+	# 						break
+	# 		elif frac > 0.9: # end of edge, go forwards to find next edge
+	# 			check = 0
+	# 			for j in xrange(i+1, len(edges)):
+	# 				if edges[i] != edges[j]:
+	# 					transedges[i] = (tmp[1],trans_dict[edges[j]][0])
+	# 					check = 1
+	# 					break
+	# 			if check == 0: # got to end of series with no next edge, assign any trans edge that matches
+	# 				for edge_it in G.edges_iter():
+	# 					if edge_it[0] == edges[i][1]:
+	# 						transedges[i] = (tmp[1],trans_dict[edge_it][0])
+	# 						break
+	# 		else:
+	# 			transedges[i] = tmp
 
-	def get_trans_edges(edges, fracs, ride):
-		transedges = np.array(edges)
-		error = 0
-		for i, frac in enumerate(fracs):
-			tmp = trans_dict[edges[i]]
-			if frac < 0.01: # beginning of edge, go backwards to find previous edge
-				check = 0
-				for j in xrange(i-1, 0, -1):
-					if edges[i] != edges[j]:
-						transedges[i] = (trans_dict[edges[j]][1],tmp[0])
-						check = 1
-						break
-				if check == 0: # got to beginning of series with no previous edge, assign any trans edge that matches
-					for edge_it in G.edges_iter():
-						if edge_it[1] == edges[i][0]:
-							transedges[i] = (trans_dict[edge_it][1],tmp[0])
-							break
-			elif frac > 0.9: # end of edge, go forwards to find next edge
-				check = 0
-				for j in xrange(i+1, len(edges)):
-					if edges[i] != edges[j]:
-						transedges[i] = (tmp[1],trans_dict[edges[j]][0])
-						check = 1
-						break
-				if check == 0: # got to end of series with no next edge, assign any trans edge that matches
-					for edge_it in G.edges_iter():
-						if edge_it[0] == edges[i][1]:
-							transedges[i] = (tmp[1],trans_dict[edge_it][0])
-							break
-			else:
-				transedges[i] = tmp
-
-			if transedges[i] not in transG.edges():
-				print 'ride ' + str(ride) + ' transition edge mismatch'
-				print 'transition ' + str(transedges[i]) + ' does not exist'
-				error = 1
-				break
-		return transedges, error
+	# 		if transedges[i] not in transG.edges():
+	# 			print 'ride ' + str(ride) + ' transition edge mismatch'
+	# 			print 'transition ' + str(transedges[i]) + ' does not exist'
+	# 			error = 1
+	# 			break
+	# 	return transedges, error
 
 	def update_loc(edges, fracs):
 		newx = np.zeros((len(edges),))
@@ -699,14 +729,13 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 		return np.vstack([newy, newx, edges, fracs]).T, transedges, error, troublemakers
 
 	uber_df = uber_df.groupby('ride').apply(mapping)
-	#for ride in rides:
-
-	tmp = uber_df[['x','y']].apply(find_nearest_street, axis=1)
 	print 'found nearest edges'
 
-	uber_df['edge'] = tmp[0]
-	uber_df['fraction'] = tmp[1]
-	uber_df['street'] = uber_df['edge'].apply(lambda x: edge_dict[x][0])
+	# for ride in rides:
+	# tmp = uber_df[['x','y']].apply(find_nearest_street, axis=1)
+	# uber_df['edge'] = tmp[0]
+	# uber_df['fraction'] = tmp[1]
+	# uber_df['street'] = uber_df['edge'].apply(lambda x: edge_dict[x][0])
 
 	# rides = uber_df['ride'].unique()
 	# transedges_array = np.array([])
@@ -792,8 +821,8 @@ def get_features(df):
 compute kmeans clusters
 '''
 def get_clusters(X, n=4):
-# 	distxy = squareform(pdist(X_scaled, metric='euclidean'))
-# 	linkage(distxy, method='complete')
+	# distxy = squareform(pdist(X_scaled, metric='euclidean'))
+	# linkage(distxy, method='complete')
 	model = KMeans(n,n_jobs=-1)
 	model.fit(X)
 
@@ -804,7 +833,7 @@ def get_clusters(X, n=4):
 # 	for edge,group in grouped:
 
 def main():
-	from_pickle = 0
+	from_pickle = 1
 
 	xmax = -122.417
 	xmin = -122.420
@@ -822,10 +851,10 @@ def main():
 	if from_pickle:
 		street_df = pickle.load(open('pickles/street_df.pkl','rb'))
 		print 'read street df'
-		street_df = street_df = street_df[(street_df['xstart'] >= xmin) & (street_df['xstart'] <= xmax) &
-			(street_df['xstop'] >= xmin) & (street_df['xstop'] <= xmax) &
-			(street_df['ystart'] >= ymin) & (street_df['ystart'] <= ymax) &
-			(street_df['ystop'] >= ymin) & (street_df['ystop'] <= ymax)]
+		# street_df = street_df = street_df[(street_df['xstart'] >= xmin) & (street_df['xstart'] <= xmax) &
+		# 	(street_df['xstop'] >= xmin) & (street_df['xstop'] <= xmax) &
+		# 	(street_df['ystart'] >= ymin) & (street_df['ystart'] <= ymax) &
+		# 	(street_df['ystop'] >= ymin) & (street_df['ystop'] <= ymax)]
 
 		street_graph = pickle.load(open('pickles/street_graph.pkl','rb'))
 		node_coord_dict = pickle.load(open('pickles/node_coord_dict.pkl','rb'))
@@ -837,13 +866,16 @@ def main():
 		transition_graph = pickle.load(open('pickles/transition_graph.pkl','rb'))
 		trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
 		print 'read transition graph'
+
+		uber_df = pickle.load(open('pickles/uber_df_projected.pkl'))
+		print 'read projected uber data'
 	else:
 		# street_df = load_streets(n=0)
 		street_df = pickle.load(open('pickles/street_df.pkl','rb'))
-		street_df = street_df = street_df[(street_df['xstart'] >= xmin) & (street_df['xstart'] <= xmax) &
-			(street_df['xstop'] >= xmin) & (street_df['xstop'] <= xmax) &
-			(street_df['ystart'] >= ymin) & (street_df['ystart'] <= ymax) &
-			(street_df['ystop'] >= ymin) & (street_df['ystop'] <= ymax)]
+		# street_df = street_df = street_df[(street_df['xstart'] >= xmin) & (street_df['xstart'] <= xmax) &
+		# 	(street_df['xstop'] >= xmin) & (street_df['xstop'] <= xmax) &
+		# 	(street_df['ystart'] >= ymin) & (street_df['ystart'] <= ymax) &
+		# 	(street_df['ystop'] >= ymin) & (street_df['ystop'] <= ymax)]
 		print 'loaded street df'
 
 		street_graph, node_coord_dict, coord_node_dict, edge_dict, coord_lookup = create_graph(street_df)
@@ -858,14 +890,14 @@ def main():
 		pickle.dump(transition_graph,open('pickles/transition_graph.pkl','wb'))
 		pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
 		print 'computed transition graph'
-	
-	''' apply Kalman filter first pass here, fix large errors '''
-	
-	uber_df = project(uber_df, street_graph, transition_graph, node_coord_dict, edge_dict, trans_dict, coord_lookup)
-	pickle.dump(uber_df,open('pickles/uber_df_projected.pkl','wb'))
-	print 'projected uber onto streets'
-	
-	''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
+
+		''' apply Kalman filter first pass here, fix large errors '''
+
+		uber_df = project(uber_df, street_graph, transition_graph, node_coord_dict, edge_dict, trans_dict, coord_lookup)
+		pickle.dump(uber_df,open('pickles/uber_df_projected.pkl','wb'))
+		print 'projected uber onto streets'
+		
+		''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
 	
 	uber_df = uber_df.join(compute_speed(uber_df))
 	uber_df = uber_df.join(compute_accel(uber_df))
