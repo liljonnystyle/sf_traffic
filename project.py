@@ -392,7 +392,7 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 		broken_chain = np.ones(len(data))
 		edges = []
 		fracs = []
-		# if data.iloc[0]['ride'] == 317:
+		# if data.iloc[0]['ride'] == 14:
 		# 	ipdb.set_trace()
 		for i in xrange(len(data)):
 			row = data.iloc[i]
@@ -404,13 +404,14 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 					y2 = data.iloc[i+1]['y']
 
 					searching = 1
-					radius = 0
-					lookup_edges = set()
+					radius = 1
+					checked_edges = set()
 					while searching:
 						radius += 1
-						lookup_edges_new = get_lookup_edges(G,edge1[1],radius)
-						lookup_edges_new = lookup_edges_new.union(get_lookup_edges(G,edge1[0],radius))
-						lookup_edges = lookup_edges_new.difference(lookup_edges)
+						lookup_edges = get_lookup_edges(G,edge1[1],radius)
+						lookup_edges = lookup_edges.union(get_lookup_edges(G,edge1[0],radius))
+						lookup_edges = lookup_edges.difference(checked_edges)
+						checked_edges = checked_edges.union(lookup_edges)
 						edge2, frac2, searching = find_nearest_street(x2, y2, lookup_edges)
 
 					if edge1 == edge2:
@@ -489,14 +490,14 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 						y2 = data.iloc[i+1]['y']
 						
 						searching = 1
-						radius = 0
-						lookup_edges = set()
+						radius = 1
+						edge_reverse = (edge1[1], edge1[0])
+						checked_edges = set(edge_reverse)
 						while searching:
 							radius += 1
-							lookup_edges_new = get_lookup_edges(G,startnode,radius)
-							lookup_edges = lookup_edges_new.difference(lookup_edges)
-							edge_reverse = (edge1[1], edge1[0])
-							lookup_edges.discard(edge_reverse)
+							lookup_edges = get_lookup_edges(G,startnode,radius)
+							lookup_edges = lookup_edges.difference(checked_edges)
+							checked_edges = checked_edges.union(lookup_edges)
 							edge2, frac2, searching = find_nearest_street(x2, y2, lookup_edges)
 
 						if edge1 == edge2:
@@ -512,21 +513,46 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 							edges.append(edge1)
 							fracs.append(frac1)
 						else:
-							proposed_edges1 = [(startnode, edge2[0]), (startnode, edge2[1])]
-							if proposed_edges1[0] in edge_dict:
-								broken_chain[i+1] = 0
-								edges.append(proposed_edges1[0])
-								fracs.append(0.5)
-							elif proposed_edges1[1] in edge_dict:
-								broken_chain[i+1] = 0
-								edges.append(proposed_edges1[1])
-								fracs.append(0.5)
-							else:
+							proposed_edges1 = set()
+							if (startnode, edge2[0]) in edge_dict:
+								proposed_edges1.add((startnode, edge2[0]))
+							if (startnode, edge2[1]) in edge_dict:
+								proposed_edges1.add((startnode, edge2[1]))
+							newedge1, newfrac1, searching = find_nearest_street(row['x'], row['y'], proposed_edges1)
+							if searching == 1:
 								edges.append(edge1)
 								fracs.append(frac1)
+							else:
+								broken_chain[i+1] = 0
+								edges.append(newedge1)
+								fracs.append(newfrac1)
 					else:
 						edges.append(edge1)
 						fracs.append(frac1)
+				else:
+					if i <= len(data)-2:
+						x2 = data.iloc[i+1]['x']
+						y2 = data.iloc[i+1]['y']
+						
+						searching = 1
+						radius = 1
+						edge_reverse = (edge1[1], edge1[0])
+						checked_edges = set(edge_reverse)
+						while searching:
+							radius += 1
+							lookup_edges = get_lookup_edges(G,stopnode,radius)
+							lookup_edges.add(edge1)
+							lookup_edges = lookup_edges.difference(checked_edges)
+							checked_edges = checked_edges.union(lookup_edges)
+							edge2, frac2, searching = find_nearest_street(x2, y2, lookup_edges)
+
+						if edge1 == edge2:
+							broken_chain[i+1] = 0
+						elif edge1[1] == edge2[0]:
+							broken_chain[i+1] = 0
+						elif edge1[1] == edge2[1]:
+							broken_chain[i+1] = 0
+
 
 		data['edge'] = edges
 		data['fraction'] = fracs
@@ -707,11 +733,12 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 	def update_loc(edges, fracs):
 		newx = np.zeros((len(edges),))
 		newy = np.zeros((len(edges),))
-		for i, edge in enumerate(edges):
-			length, unit_vec = edge_eval(node_dict[edge[0]], node_dict[edge[1]])
-			vec = unit_vec*length*fracs[i]
-			newx[i] = node_dict[edge[0]][0] + vec[0]
-			newy[i] = node_dict[edge[0]][1] + vec[1]
+		for i in xrange(len(edges)):
+		#for i, edge in enumerate(edges):
+			length, unit_vec = edge_eval(node_dict[edges.iloc[i][0]], node_dict[edges.iloc[i][1]])
+			vec = unit_vec*length*fracs.iloc[i]
+			newx[i] = node_dict[edges.iloc[i][0]][0] + vec[0]
+			newy[i] = node_dict[edges.iloc[i][0]][1] + vec[1]
 		return newy, newx
 
 	def dftransform(subdf):
@@ -730,6 +757,8 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 
 	uber_df = uber_df.groupby('ride').apply(mapping)
 	print 'found nearest edges'
+	newy, newx = update_loc(uber_df['edge'], uber_df['fraction'])
+	uber_df.ix[:,['y','x']] = np.vstack([newy, newx]).T
 
 	# for ride in rides:
 	# tmp = uber_df[['x','y']].apply(find_nearest_street, axis=1)
@@ -833,7 +862,7 @@ def get_clusters(X, n=4):
 # 	for edge,group in grouped:
 
 def main():
-	from_pickle = 1
+	from_pickle = 0
 
 	xmax = -122.417
 	xmin = -122.420
@@ -899,20 +928,20 @@ def main():
 		
 		''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
 	
-	uber_df = uber_df.join(compute_speed(uber_df))
-	uber_df = uber_df.join(compute_accel(uber_df))
+	# uber_df = uber_df.join(compute_speed(uber_df))
+	# uber_df = uber_df.join(compute_accel(uber_df))
 
-	uber_df = subset_flag_df(uber_df)
+	# uber_df = subset_flag_df(uber_df)
 
-	rush_hour_flags = [None, 'morning', 'afternoon']
-	uber_df['cluster_flag'] = None
+	# rush_hour_flags = [None, 'morning', 'afternoon']
+	# uber_df['cluster_flag'] = None
 
-	for i,flag in enumerate(rush_hour_flags):
-		flag_df = uber_df[uber_df['rush_hour'] == flag]
-		X = get_features(flag_df)
-		clusters = get_clusters(X, n=4) + i*4
+	# for i,flag in enumerate(rush_hour_flags):
+	# 	flag_df = uber_df[uber_df['rush_hour'] == flag]
+	# 	X = get_features(flag_df)
+	# 	clusters = get_clusters(X, n=4) + i*4
 
-		uber_df['cluster'] = clusters
+	# 	uber_df['cluster'] = clusters
 
 	'''
 	xx, yy = np.meshgrid(rush_hour_flags,np.arange(4))
