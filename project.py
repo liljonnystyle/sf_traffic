@@ -10,6 +10,7 @@ import ast
 import time
 import sys
 import pickle
+import math
 import ipdb
 # import psycopg2 as psycho
 
@@ -31,8 +32,9 @@ def deriv(x):
 	# Use centered differences for the interior points, one-sided differences for the ends
 	for i in xrange(1,n-1):
 		d[i] = (x.iloc[i+1]-x.iloc[i])/(x.index[i+1]-x.index[i]).total_seconds()
-	d[0] = (x.iloc[1]-x.iloc[0])/(x.index[1]-x.index[0]).total_seconds()
-	d[n-1] = (x.iloc[n-1]-x.iloc[n-2])/(x.index[n-1]-x.index[n-2]).total_seconds()
+	if n > 1:
+		d[0] = (x.iloc[1]-x.iloc[0])/(x.index[1]-x.index[0]).total_seconds()
+		d[n-1] = (x.iloc[n-1]-x.iloc[n-2])/(x.index[n-1]-x.index[n-2]).total_seconds()
 	return d
 
 def dparser(datestring):
@@ -50,10 +52,10 @@ def load_uber(nlines=-1):
 	uber_df.drop_duplicates(inplace=True)
 
 	# remove remaining rides that are shorter than 5 minutes
-	#df = df[df.groupby(['ride'])['ride'].transform('count') >= 75] 
+	uber_df = uber_df[uber_df.groupby(['ride'])['ride'].transform('count') >= 3] 
 	# should actually do this by filtering trip duration, rather than value counts
 
-	# resample to every 2 seconds
+	# resample to every 2 seconds?
 	return uber_df.iloc[:nlines]
 
 '''
@@ -741,19 +743,19 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 			newy[i] = node_dict[edges.iloc[i][0]][1] + vec[1]
 		return newy, newx
 
-	def dftransform(subdf):
-		error = 0
-		edges, fracs, troublemakers = voting(subdf['edge'].values, subdf['fraction'].values)
-		# edges, fracs, error = check_edges(edges, fracs, subdf['ride'].iloc[0])
-		# if error == 1:
-			# return subdf, edges, error
-		newy, newx = update_loc(edges, fracs)
+	# def dftransform(subdf):
+	# 	error = 0
+	# 	edges, fracs, troublemakers = voting(subdf['edge'].values, subdf['fraction'].values)
+	# 	# edges, fracs, error = check_edges(edges, fracs, subdf['ride'].iloc[0])
+	# 	# if error == 1:
+	# 		# return subdf, edges, error
+	# 	newy, newx = update_loc(edges, fracs)
 
-		transedges, error = get_trans_edges(edges, fracs, subdf['ride'].iloc[0])
-		# if error == 1:
-			# return subdf, edges, error
+	# 	transedges, error = get_trans_edges(edges, fracs, subdf['ride'].iloc[0])
+	# 	# if error == 1:
+	# 		# return subdf, edges, error
 
-		return np.vstack([newy, newx, edges, fracs]).T, transedges, error, troublemakers
+	# 	return np.vstack([newy, newx, edges, fracs]).T, transedges, error, troublemakers
 
 	uber_df = uber_df.groupby('ride').apply(mapping)
 	print 'found nearest edges'
@@ -789,11 +791,15 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 	return uber_df
 
 def compute_speed(uber_df):
+	radius = 3963.1676
+	rad_x = 3963.1676*np.cos(37.7833*math.pi/180)
+
 	grouped = uber_df.groupby(['ride'])
 	count = 0
 	for ride, group in grouped:
-		speedx = deriv(group.set_index('datetime')['x'])
-		speedy = deriv(group.set_index('datetime')['y'])
+		speedx = deriv(group.set_index('datetime')['x']) * 2 * math.pi * rad_x * 10
+		speedy = deriv(group.set_index('datetime')['y']) * 2 * math.pi * radius * 10
+		# speeds in miles per hour
 		if count == 0:
 			speeddf = pd.DataFrame(np.sqrt(speedx**2 + speedy**2),index=[group.index],columns=['speed'])
 		else:
@@ -802,9 +808,11 @@ def compute_speed(uber_df):
 	return speeddf
 
 def compute_accel(uber_df):
+	grouped = uber_df.groupby(['ride'])
 	count = 0
-	for ride, group in df.groupby(['ride']):
-		accel = deriv(group.set_index('datetime')['speed']) # compute acceleration in meter/s/s
+	for ride, group in grouped:
+		accel = deriv(group.set_index('datetime')['speed']) * 1609.34 / 3600
+		# compute acceleration in meter/s/s
 		if count == 0:
 			acceldf = pd.DataFrame(accel,index=[group.index],columns=['accel'])
 		else:
@@ -815,35 +823,37 @@ def compute_accel(uber_df):
 '''
 create rush hour flag column in Uber DataFrame
 '''
-def subset_flag_df(uber_df):
+def flag_rushhour(uber_df):
 	reindexed_df = uber_df.set_index('datetime')
-	reindexed_df['rush_hour'] = None
+	reindexed_df['rush_hour'] = 'none'
 
 	morning_df = reindexed_df.ix['2007-01-02':'2007-01-07'].between_time('6:00','10:00')
-	reindexed_df[morning_df.index]['rush_hour'] = 'morning'
+	reindexed_df.ix[morning_df.index, 'rush_hour'] = 'morning'
 	afternoon_df = reindexed_df.ix['2007-01-02':'2007-01-07'].between_time('15:00','19:00')
-	reindexed_df[afternoon_df.index]['rush_hour'] = 'afternoon'
-	return reindexed_df
+	reindexed_df.ix[afternoon_df.index, 'rush_hour'] = 'afternoon'
+
+	return reindexed_df.reset_index()
 
 def get_features(df):
 	X = pd.DataFrame(df.groupby('ride')['speed'].max())
 	X.columns = ['max_speed']
 	X['avg_speed'] = df.groupby('ride')['speed'].mean()
 	X['med_speed'] = df.groupby('ride')['speed'].median()
-	X['max_accel'] = df[df['accel']>0].groupby('ride')['accel'].max()
-	X['avg_accel'] = df[df['accel']>0].groupby('ride')['accel'].mean()
-	X['med_accel'] = df[df['accel']>0].groupby('ride')['accel'].median()
-	X['max_decel'] = df[df['accel']<0].groupby('ride')['accel'].min()
-	X['avg_decel'] = df[df['accel']<0].groupby('ride')['accel'].mean()
-	X['med_decel'] = df[df['accel']<0].groupby('ride')['accel'].median()
+	X['max_accel'] = df[df['accel']>=0].groupby('ride')['accel'].max()
+	X['avg_accel'] = df[df['accel']>=0].groupby('ride')['accel'].mean()
+	X['med_accel'] = df[df['accel']>=0].groupby('ride')['accel'].median()
+	X['max_decel'] = df[df['accel']<=0].groupby('ride')['accel'].min()
+	X['avg_decel'] = df[df['accel']<=0].groupby('ride')['accel'].mean()
+	X['med_decel'] = df[df['accel']<=0].groupby('ride')['accel'].median()
 
 	'''
 	mean free path: average time driving in between stops (aka zero velocity timestamps)
 	'''
 	def mfp(data):
-		nz = np.nonzero(np.append(0,data['speed']))
+		nz = np.where(np.append(0,data) == 0, 0, 1) # flag non-zeros
 		return 4.0*sum(nz)/len(np.where(np.diff(nz) == 1)[0]) #mean free path in seconds
-	X['mfp'] = df[['ride','speed','time']].groupby('ride').apply(mfp)
+	
+	X['mfp'] = df.groupby('ride')['speed'].apply(mfp)
 	return X
 
 '''
@@ -855,27 +865,30 @@ def get_clusters(X, n=4):
 	model = KMeans(n,n_jobs=-1)
 	model.fit(X)
 
-	return model.predict(X)
+	return model.predict(X), model.cluster_centers_
 
 # def compute_edge_weight(df,edge):
 # 	grouped = df.groupby('trans_edge')
 # 	for edge,group in grouped:
 
 def main():
-	from_pickle = 0
+	from_pickle = 1
 
 	xmax = -122.417
 	xmin = -122.420
 	ymin = 37.76181
 	ymax = 37.7655
 
-	uber_df = load_uber() # resample to every 2 seconds
+	uber_df = load_uber()
 	print 'loaded uber_df'
 
 	uber_df = uber_df[uber_df['x'] >= xmin]
 	uber_df = uber_df[uber_df['x'] <= xmax]
 	uber_df = uber_df[uber_df['y'] >= ymin]
 	uber_df = uber_df[uber_df['y'] <= ymax]
+
+	# resample to fill in gaps, need to implement my own interpolation function
+	# uber_df.set_index('datetime').resample('4000L').reset_index(inplace=True)
 
 	if from_pickle:
 		street_df = pickle.load(open('pickles/street_df.pkl','rb'))
@@ -928,20 +941,29 @@ def main():
 		
 		''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
 	
-	# uber_df = uber_df.join(compute_speed(uber_df))
-	# uber_df = uber_df.join(compute_accel(uber_df))
+	uber_df = uber_df[uber_df.groupby(['ride'])['ride'].transform('count') >= 3]
+	uber_df = uber_df.join(compute_speed(uber_df))
+	uber_df = uber_df.join(compute_accel(uber_df))
 
-	# uber_df = subset_flag_df(uber_df)
+	uber_df = flag_rushhour(uber_df)
 
-	# rush_hour_flags = [None, 'morning', 'afternoon']
-	# uber_df['cluster_flag'] = None
+	rush_hour_flags = ['none', 'morning', 'afternoon']
+	uber_df['cluster'] = None
 
-	# for i,flag in enumerate(rush_hour_flags):
-	# 	flag_df = uber_df[uber_df['rush_hour'] == flag]
-	# 	X = get_features(flag_df)
-	# 	clusters = get_clusters(X, n=4) + i*4
+	for i,flag in enumerate(rush_hour_flags):
+		flag_df = uber_df[uber_df['rush_hour'] == flag]
+		X = get_features(flag_df)
+		clusters, centers = get_clusters(X, n=4)
+		clusters += i*4
+		if i == 0:
+			centroids = centers
+		else:
+			centroids = np.vstack((centroids,centers))
+		ride_cluster_dict = dict(zip(X.index,clusters))
+		uber_df.ix[flag_df.index,'cluster'] = uber_df.ix[flag_df.index,'ride'].apply(lambda x: ride_cluster_dict[x])
 
-	# 	uber_df['cluster'] = clusters
+	pickle.dump(uber_df, open('pickles/uber_df_clustered.pkl','wb'))
+	pickle.dump(centroids, open('pickles/centroids.pkl','wb'))
 
 	'''
 	xx, yy = np.meshgrid(rush_hour_flags,np.arange(4))
