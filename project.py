@@ -51,6 +51,9 @@ def load_uber(nlines=-1):
 	# some rides have duplicated datapoints
 	uber_df.drop_duplicates(inplace=True)
 
+	uber_df = uber_df[(uber_df['x'] >= -123) & (uber_df['x'] <= -122) &
+			(uber_df['y'] >= 37) & (uber_df['y'] <= 38)]
+
 	# remove remaining rides that are shorter than 5 minutes
 	uber_df = uber_df[uber_df.groupby(['ride'])['ride'].transform('count') >= 3] 
 	# should actually do this by filtering trip duration, rather than value counts
@@ -70,12 +73,13 @@ def load_streets(n=0):
 		df = pd.concat([df, pd.DataFrame([
 			street['properties']['STREETNAME'],
 			street['properties']['ONEWAY'],
-			street['geometry']['coordinates'][0][0],
-			street['geometry']['coordinates'][0][1],
-			street['geometry']['coordinates'][-1][0],
-			street['geometry']['coordinates'][-1][1]
+			int(street['properties']['CLASSCODE']),
+			float(street['geometry']['coordinates'][0][0]),
+			float(street['geometry']['coordinates'][0][1]),
+			float(street['geometry']['coordinates'][-1][0]),
+			float(street['geometry']['coordinates'][-1][1])
 			]).T],axis=0)
-	colnames = ['name','oneway','xstart','ystart','xstop','ystop']
+	colnames = ['name','oneway','class','xstart','ystart','xstop','ystop']
 	df.columns = colnames
 	df.reset_index(inplace=True)
 	df.pop('index')
@@ -84,7 +88,7 @@ def load_streets(n=0):
 	# ystarts = np.zeros((nstreets,1))
 	# xstops = np.zeros((nstreets,1))
 	# ystops = np.zeros((nstreets,1))
-
+	
 	if n == 0:
 		'''
 		prepare input file for fortran program to convert state plane
@@ -226,6 +230,15 @@ def create_graph(df):
 	coord_node_dict = {}
 	coord_lookup = {}
 
+	class_wt_dict = {}
+	class_wt_dict[0] = 1./20
+	class_wt_dict[1] = 1./65
+	class_wt_dict[2] = 1./45
+	class_wt_dict[3] = 1./35
+	class_wt_dict[4] = 1./35
+	class_wt_dict[5] = 1./25
+	class_wt_dict[6] = 1./45
+	
 	for i, street in df.iterrows():
 		xstart = street['xstart']
 		ystart = street['ystart']
@@ -282,8 +295,9 @@ def create_graph(df):
 
 		if node_coord_dict[start_node] != node_coord_dict[stop_node]:
 			if street['oneway'] != 'T':
+				wt = class_wt_dict[street['class']]
 				G.add_path([start_node, stop_node])
-				edge_dict[(start_node, stop_node)] = [street['name']]
+				edge_dict[(start_node, stop_node)] = [street['name'],street['class']]
 				for key in keys:
 					if key in coord_lookup.keys():
 						coord_lookup[key].add((start_node, stop_node))
@@ -291,8 +305,9 @@ def create_graph(df):
 						coord_lookup[key] = set([(start_node, stop_node)])
 
 			if street['oneway'] != 'F':
+				wt = class_wt_dict[street['class']]
 				G.add_path([stop_node, start_node])
-				edge_dict[(stop_node, start_node)] = [street['name']]
+				edge_dict[(stop_node, start_node)] = [street['name'],street['class']]
 				for key in keys:
 					if key in coord_lookup.keys():
 						coord_lookup[key].add((stop_node, start_node))
@@ -305,6 +320,9 @@ def create_graph(df):
 		edge_len, edge_vec = edge_eval(node1,node2)
 		edge_dict[edge].append(edge_len)
 		edge_dict[edge].append(edge_vec)
+		wt = edge_dict[edge][1]*edge_dict[edge][2]
+		G[edge[0]][edge[1]]['weight'] = wt
+
 	'''
 	edge_dict keyed on node-node tuple
 	values are list of street name, edge length, edge unit vec
@@ -339,13 +357,20 @@ def create_transition_graph(G, node_dict, edge_dict):
 	newG = nx.DiGraph().to_directed()
 	start_dict = {}
 	stop_dict = {}
-	trans_dict = {}
+	trans_edge_dict = {}
+	edge_trans_dict = {}
 	node_count = 0
-	trans_node_dict = {}
+	transnode_node_dict = {}
 	for edge in G.edges_iter():
-		new_edge = shorten_edge(node_dict[edge[0]], edge_dict[edge][1], edge_dict[edge][2])
-		trans_dict[edge] = new_edge
-		newG.add_path([new_edge[0], new_edge[1]], weight=9999)
+		new_edge_coords = shorten_edge(node_dict[edge[0]], edge_dict[edge][2], edge_dict[edge][3])
+		wt = G[edge[0]][edge[1]]['weight']
+		newG.add_path([node_count, node_count+1], weight=wt)
+		new_edge = (node_count, node_count+1)
+		node_count += 2
+		trans_edge_dict[new_edge] = edge
+		edge_trans_dict[edge] = new_edge
+		transnode_node_dict[new_edge[0]] = edge[0]
+		transnode_node_dict[new_edge[1]] = edge[1]
 		if edge[0] in start_dict:
 			start_dict[edge[0]].append(new_edge[0])
 		else:
@@ -355,9 +380,9 @@ def create_transition_graph(G, node_dict, edge_dict):
 	for newstop, oldstop in stop_dict.iteritems():
 		if oldstop in start_dict:
 			for newstart in start_dict[oldstop]:
-				newG.add_path([newstop, newstart], weight=0)
+				newG.add_path([newstop, newstart], weight=0.01)
 
-	return newG, trans_dict
+	return newG, trans_edge_dict, edge_trans_dict, transnode_node_dict
 
 '''
 find perpendicular distance from point to line
@@ -565,7 +590,7 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 		for edge in edges:
 			coord1 = node_dict[edge[0]]
 			coord2 = node_dict[edge[1]]
-			dist, frac = point_to_line((x, y), coord1, coord2, edge_dict[edge][1], edge_dict[edge][2])
+			dist, frac = point_to_line((x, y), coord1, coord2, edge_dict[edge][2], edge_dict[edge][3])
 			if dist < min_dist and (frac >= 0 and frac <= 1):
 				min_dist = dist
 				min_edge = edge
@@ -867,12 +892,17 @@ def get_clusters(X, n=4):
 
 	return model.predict(X), model.cluster_centers_
 
-# def compute_edge_weight(df,edge):
-# 	grouped = df.groupby('trans_edge')
-# 	for edge,group in grouped:
+'''
+compute edge weights for non-transition edges
+'''
+def get_edge_weights(data, args):
+	trans_edge_dict, edge_dict = args
+	edge = trans_edge_dict[data['trans_edge'].iloc[0]]
+	name, class_, length, vec = edge_dict[edge]
+	return np.mean(data['speed']**(-1)) * length
 
 def main():
-	from_pickle = 1
+	from_pickle = 0
 
 	xmax = -122.417
 	xmin = -122.420
@@ -882,10 +912,10 @@ def main():
 	uber_df = load_uber()
 	print 'loaded uber_df'
 
-	uber_df = uber_df[uber_df['x'] >= xmin]
-	uber_df = uber_df[uber_df['x'] <= xmax]
-	uber_df = uber_df[uber_df['y'] >= ymin]
-	uber_df = uber_df[uber_df['y'] <= ymax]
+	# uber_df = uber_df[uber_df['x'] >= xmin]
+	# uber_df = uber_df[uber_df['x'] <= xmax]
+	# uber_df = uber_df[uber_df['y'] >= ymin]
+	# uber_df = uber_df[uber_df['y'] <= ymax]
 
 	# resample to fill in gaps, need to implement my own interpolation function
 	# uber_df.set_index('datetime').resample('4000L').reset_index(inplace=True)
@@ -906,14 +936,16 @@ def main():
 		print 'read street graph'
 
 		transition_graph = pickle.load(open('pickles/transition_graph.pkl','rb'))
-		trans_dict = pickle.load(open('pickles/trans_dict.pkl','rb'))
+		trans_edge_dict = pickle.load(open('pickles/trans_edge_dict.pkl','rb'))
+		edge_trans_dict = pickle.load(open('pickles/edge_trans_dict.pkl','rb'))
 		print 'read transition graph'
 
 		uber_df = pickle.load(open('pickles/uber_df_projected.pkl'))
 		print 'read projected uber data'
 	else:
-		# street_df = load_streets(n=0)
-		street_df = pickle.load(open('pickles/street_df.pkl','rb'))
+		street_df = load_streets(n=1)
+		pickle.dump(street_df,open('pickles/street_df.pkl','wb'))
+		# street_df = pickle.load(open('pickles/street_df.pkl','rb'))
 		# street_df = street_df = street_df[(street_df['xstart'] >= xmin) & (street_df['xstart'] <= xmax) &
 		# 	(street_df['xstop'] >= xmin) & (street_df['xstop'] <= xmax) &
 		# 	(street_df['ystart'] >= ymin) & (street_df['ystart'] <= ymax) &
@@ -928,18 +960,17 @@ def main():
 		pickle.dump(coord_lookup,open('pickles/coord_lookup.pkl','wb'))
 		print 'computed street graph'
 	
-		transition_graph, trans_dict = create_transition_graph(street_graph, node_coord_dict, edge_dict)
+		transition_graph, trans_edge_dict, edge_trans_dict, transnode_node_dict = create_transition_graph(street_graph, node_coord_dict, edge_dict)
 		pickle.dump(transition_graph,open('pickles/transition_graph.pkl','wb'))
-		pickle.dump(trans_dict,open('pickles/trans_dict.pkl','wb'))
+		pickle.dump(trans_edge_dict,open('pickles/trans_edge_dict.pkl','wb'))
+		pickle.dump(edge_trans_dict,open('pickles/edge_trans_dict.pkl','wb'))
 		print 'computed transition graph'
 
 		''' apply Kalman filter first pass here, fix large errors '''
-
-		uber_df = project(uber_df, street_graph, transition_graph, node_coord_dict, edge_dict, trans_dict, coord_lookup)
+		uber_df = project(uber_df, street_graph, transition_graph, node_coord_dict, edge_dict, edge_trans_dict, coord_lookup)
+		''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
 		pickle.dump(uber_df,open('pickles/uber_df_projected.pkl','wb'))
 		print 'projected uber onto streets'
-		
-		''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
 	
 	uber_df = uber_df[uber_df.groupby(['ride'])['ride'].transform('count') >= 3]
 	uber_df = uber_df.join(compute_speed(uber_df))
@@ -965,17 +996,23 @@ def main():
 	pickle.dump(uber_df, open('pickles/uber_df_clustered.pkl','wb'))
 	pickle.dump(centroids, open('pickles/centroids.pkl','wb'))
 
-	'''
-	xx, yy = np.meshgrid(rush_hour_flags,np.arange(4))
-	for flag, cluster in zip(flatten(xx),flatten(yy)):
+	# uber_df = pickle.load(open('pickles/uber_df_clustered.pkl','rb'))
+	# centroids = pickle.load(open('pickles/centroids.pkl','rb'))
+
+	nclusters = centroids.shape[0]
+	cluster_graphs = []
+	for i in xrange(nclusters):
 		clone_graph = transition_graph
-		df = uber_df[(uber_df['rush_hour'] == flag) & (uber_df['cluster'] == cluster)][['speed','trans_edge']]
-		edge_speed_df = df.groupby('trans_edge')['speed'].mean() * trans_edge_len(???)
+		df = uber_df[uber_df['cluster'] == i][['speed','trans_edge']]
+		edge_weights_df = df.groupby('trans_edge')[['trans_edge','speed']].apply(get_edge_weights, args=(trans_edge_dict,edge_dict))
+		edge_weights_dict = edge_weights_df.to_dict()
 		edges = df['trans_edge'].unique()
-		for edge in edges:
-			i = some_trans_graph_dictionary(???)[edge]
-			clone_graph.edges()[i]['weight'] = edge_speed_df[edge]
-	'''
+		for edge, weight in edge_weights_dict.iteritems():
+			clone_graph[edge[0]][edge[1]]['weight'] = weight
+		cluster_graphs.append(clone_graph)
+	
+	pickle.dump(cluster_graphs, open('pickles/cluster_graphs.pkl','wb'))
+
 	# 		for i, edge in clone_graph.edges_iter():
 	# 			edge['weight'] = compute_edge_weight(flag_df,edge)
 	
