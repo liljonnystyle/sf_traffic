@@ -421,7 +421,7 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 		fracs = []
 		for i in xrange(len(data)):
 			row = data.iloc[i]
-			# if i == 14:
+			# if i == 28:
 			# 	ipdb.set_trace()
 			if broken_chain[i] == 1:
 				lookup_edges = coord_lookup[(format(row['x'],'.2f'),format(row['y'],'.2f'))]
@@ -472,9 +472,19 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 								if proposed_edge1 in edge_dict:
 									edges.append(proposed_edge1)
 									fracs.append(1-frac1)
-						elif (edge1[0] == edge2[0]) or (edge1[0] == edge2[1]):
+						elif edge1[0] == edge2[0]:
 							proposed_edge1 = (edge1[1], edge1[0])
 							if proposed_edge1 in edge_dict:
+								broken_chain[i+1] = 0
+								edges.append(proposed_edge1)
+								fracs.append(1-frac1)
+							else:
+								edges.append(edge1)
+								fracs.append(frac1)
+						elif edge1[0] == edge2[1]:
+							proposed_edge1 = (edge1[1], edge1[0])
+							proposed_edge2 = (edge2[1], edge2[0])
+							if (proposed_edge1 in edge_dict) and (proposed_edge2 in edge_dict):
 								broken_chain[i+1] = 0
 								edges.append(proposed_edge1)
 								fracs.append(1-frac1)
@@ -843,7 +853,8 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 
 	# 	return np.vstack([newy, newx, edges, fracs]).T, transedges, error, troublemakers
 
-	uber_df = uber_df[uber_df['ride'] >= 9450].groupby('ride').apply(mapping)
+	uber_df = uber_df[uber_df['ride'] >= 18100].groupby('ride').apply(mapping)
+	# uber_df = uber_df.groupby('ride').apply(mapping)
 	print 'found nearest edges'
 	newy, newx = update_loc(uber_df['edge'], uber_df['fraction'])
 	uber_df.ix[:,['y','x']] = np.vstack([newy, newx]).T
