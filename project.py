@@ -261,18 +261,18 @@ def create_graph(df):
 		else:
 			stop_node = coord_node_dict[(xstop,ystop)]
 
-		xstart_trunc = trunc(xstart,2)
-		xstart_truncp = trunc(xstart+0.01,2)
-		xstart_truncm = trunc(xstart-0.01,2)
-		ystart_trunc = trunc(ystart,2)
-		ystart_truncp = trunc(ystart+0.01,2)
-		ystart_truncm = trunc(ystart-0.01,2)
-		xstop_trunc = trunc(xstop,2)
-		xstop_truncp = trunc(xstop+0.01,2)
-		xstop_truncm = trunc(xstop-0.01,2)
-		ystop_trunc = trunc(ystop,2)
-		ystop_truncp = trunc(ystop+0.01,2)
-		ystop_truncm = trunc(ystop-0.01,2)
+		xstart_trunc = format(xstart,'.2f')
+		xstart_truncp = format(xstart+0.01,'.2f')
+		xstart_truncm = format(xstart-0.01,'.2f')
+		ystart_trunc = format(ystart,'.2f')
+		ystart_truncp = format(ystart+0.01,'.2f')
+		ystart_truncm = format(ystart-0.01,'.2f')
+		xstop_trunc = format(xstop,'.2f')
+		xstop_truncp = format(xstop+0.01,'.2f')
+		xstop_truncm = format(xstop-0.01,'.2f')
+		ystop_trunc = format(ystop,'.2f')
+		ystop_truncp = format(ystop+0.01,'.2f')
+		ystop_truncm = format(ystop-0.01,'.2f')
 
 		keys = [(xstart_trunc,ystart_trunc),
 				(xstart_truncm,ystart_truncm),
@@ -419,79 +419,114 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 		broken_chain = np.ones(len(data))
 		edges = []
 		fracs = []
-		# if data.iloc[0]['ride'] == 14:
-		# 	ipdb.set_trace()
 		for i in xrange(len(data)):
 			row = data.iloc[i]
+			# if i == 14:
+			# 	ipdb.set_trace()
 			if broken_chain[i] == 1:
-				lookup_edges = coord_lookup[(trunc(row['x'],2),trunc(row['y'],2))]
+				lookup_edges = coord_lookup[(format(row['x'],'.2f'),format(row['y'],'.2f'))]
 				edge1, frac1, searching = find_nearest_street(row['x'], row['y'], lookup_edges)
-				if i < len(data)-2:
-					x2 = data.iloc[i+1]['x']
-					y2 = data.iloc[i+1]['y']
+				if searching == 1:
+					broken_chain[i] = -1
+				else:
+					if i < len(data)-2:
+						x2 = data.iloc[i+1]['x']
+						y2 = data.iloc[i+1]['y']
 
-					searching = 1
-					radius = 1
-					checked_edges = set()
-					while searching:
-						radius += 1
-						lookup_edges = get_lookup_edges(G,edge1[1],radius)
-						lookup_edges = lookup_edges.union(get_lookup_edges(G,edge1[0],radius))
-						lookup_edges = lookup_edges.difference(checked_edges)
-						checked_edges = checked_edges.union(lookup_edges)
-						edge2, frac2, searching = find_nearest_street(x2, y2, lookup_edges)
+						searching = 1
+						radius = 1
+						checked_edges = set()
+						while searching:
+							radius += 1
+							if radius <= 4:
+								lookup_edges = get_lookup_edges(G,edge1[1],radius)
+								lookup_edges = lookup_edges.union(get_lookup_edges(G,edge1[0],radius))
+							else:
+								lookup_edges = coord_lookup[(format(x2,'.2f'),format(y2,'.2f'))]
+							lookup_edges = lookup_edges.difference(checked_edges)
+							checked_edges = checked_edges.union(lookup_edges)
+							edge2, frac2, searching = find_nearest_street(x2, y2, lookup_edges)
+							if (radius == 5) and (searching == 1):
+								broken_chain[i+1] = -1
 
-					if edge1 == edge2:
-						broken_chain[i+1] = 0
-						if frac1 < frac2:
-							edges.append(edge1)
-							fracs.append(frac1)
-						else:
+						if edge1 == edge2:
+							broken_chain[i+1] = 0
+							if frac1 < frac2:
+								edges.append(edge1)
+								fracs.append(frac1)
+							else:
+								proposed_edge1 = (edge1[1], edge1[0])
+								if proposed_edge1 in edge_dict:
+									edges.append(proposed_edge1)
+									fracs.append(1-frac1)
+								else:
+									edges.append(edge1)
+									fracs.append(frac1)
+						elif edge1 == (edge2[1], edge2[0]):
+							broken_chain[i+1] = 0
+							if frac1 < 1-frac2:
+								edges.append(edge1)
+								fracs.append(frac1)
+							else:
+								proposed_edge1 = (edge1[1], edge1[0])
+								if proposed_edge1 in edge_dict:
+									edges.append(proposed_edge1)
+									fracs.append(1-frac1)
+						elif (edge1[0] == edge2[0]) or (edge1[0] == edge2[1]):
 							proposed_edge1 = (edge1[1], edge1[0])
 							if proposed_edge1 in edge_dict:
+								broken_chain[i+1] = 0
 								edges.append(proposed_edge1)
 								fracs.append(1-frac1)
 							else:
 								edges.append(edge1)
 								fracs.append(frac1)
-					elif edge1 == (edge2[1], edge2[0]):
-						broken_chain[i+1] = 0
-						if frac1 < 1-frac2:
-							edges.append(edge1)
-							fracs.append(frac1)
-						else:
-							proposed_edge1 = (edge1[1], edge1[0])
-							if proposed_edge1 in edge_dict:
-								edges.append(proposed_edge1)
-								fracs.append(1-frac1)
-					elif (edge1[0] == edge2[0]) or (edge1[0] == edge2[1]):
-						proposed_edge1 = (edge1[1], edge1[0])
-						if proposed_edge1 in edge_dict:
+						elif edge1[1] == edge2[0]:
 							broken_chain[i+1] = 0
-							edges.append(proposed_edge1)
-							fracs.append(1-frac1)
-						else:
 							edges.append(edge1)
 							fracs.append(frac1)
-					elif (edge1[1] == edge2[0]) or (edge1[1] == edge2[1]):
-						broken_chain[i+1] = 0
-						edges.append(edge1)
-						fracs.append(frac1)
+						elif (edge1[1] == edge2[1]) and ((edge2[1],edge2[0]) in edge_dict):
+							broken_chain[i+1] = 0
+							edges.append(edge1)
+							fracs.append(frac1)
+						else:
+							lookup_edges = set()
+							if (edge1[0], edge2[0]) in edge_dict:
+								lookup_edges.add((edge1[0], edge2[0]))
+							if (edge1[0], edge2[1]) in edge_dict:
+								lookup_edges.add((edge1[0], edge2[1]))
+							lookup_edges.discard(edge1)
+							newedge1, newfrac1, searching = find_nearest_street(row['x'], row['y'], lookup_edges)
+							if searching == 1:
+								edges.append(edge1)
+								fracs.append(frac1)
+							else:
+								if (newedge1[1] == edge2[1]) and ((edge2[1],edge2[0]) in edge_dict):
+									broken_chain[i+1] = 0
+									edges.append(newedge1)
+									fracs.append(newfrac1)
+								elif (newedge1[1] == edge2[1]) and ((edge2[1],edge2[0]) not in edge_dict):
+									edges.append(edge1)
+									fracs.append(frac1)
+								else:
+									broken_chain[i+1] = 0
+									edges.append(newedge1)
+									fracs.append(newfrac1)
 					else:
 						edges.append(edge1)
 						fracs.append(frac1)
-				else:
-					edges.append(edge1)
-					fracs.append(frac1)
+			elif broken_chain[i] == -1:
+				continue
 			else: # not broken chain, can be confident in start node if correct for directionality
-				edge0 = edges[i-1]
-				frac0 = fracs[i-1]
+				edge0 = edges[-1]
+				frac0 = fracs[-1]
 				
 				lookup_edges = get_lookup_edges(G,edge0[1],1)
 				lookup_edges.add(edge0)
 				edge_reverse = (edge0[1], edge0[0])
 				lookup_edges.discard(edge_reverse)
 				edge1, frac1, searching = find_nearest_street(row['x'], row['y'], lookup_edges)
+
 				stopnode = -1
 				if edge0 == edge1:
 					edges.append(edge1)
@@ -508,6 +543,8 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 					startnode = edge1[0]
 				else:
 					startnode = edge1[1]
+					if startnode == -1:
+						print i
 					lookup_edges = get_lookup_edges(G,startnode,1)
 					edge1, frac1, searching = find_nearest_street(row['x'], row['y'], lookup_edges)
 
@@ -519,14 +556,19 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 						searching = 1
 						radius = 1
 						edge_reverse = (edge1[1], edge1[0])
-						checked_edges = set(edge_reverse)
+						checked_edges = set([edge_reverse])
 						while searching:
 							radius += 1
-							lookup_edges = get_lookup_edges(G,startnode,radius)
+							if radius <= 4:
+								lookup_edges = get_lookup_edges(G,startnode,radius)
+							else:
+								lookup_edges = coord_lookup[(format(x2,'.2f'),format(y2,'.2f'))]
 							lookup_edges = lookup_edges.difference(checked_edges)
 							checked_edges = checked_edges.union(lookup_edges)
 							edge2, frac2, searching = find_nearest_street(x2, y2, lookup_edges)
-
+							if (radius == 5) and (searching == 1):
+								searching = 0
+								broken_chain[i+1] = -1
 						if edge1 == edge2:
 							broken_chain[i+1] = 0
 							edges.append(edge1)
@@ -535,24 +577,33 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 							broken_chain[i+1] = 0
 							edges.append(edge1)
 							fracs.append(frac1)
-						elif edge1[1] == edge2[1]:
+						elif (edge1[1] == edge2[1]) and ((edge2[1],edge2[0]) in edge_dict):
 							broken_chain[i+1] = 0
 							edges.append(edge1)
 							fracs.append(frac1)
 						else:
-							proposed_edges1 = set()
+							lookup_edges = set()
 							if (startnode, edge2[0]) in edge_dict:
-								proposed_edges1.add((startnode, edge2[0]))
+								lookup_edges.add((startnode, edge2[0]))
 							if (startnode, edge2[1]) in edge_dict:
-								proposed_edges1.add((startnode, edge2[1]))
-							newedge1, newfrac1, searching = find_nearest_street(row['x'], row['y'], proposed_edges1)
+								lookup_edges.add((startnode, edge2[1]))
+							lookup_edges.discard(edge1)
+							newedge1, newfrac1, searching = find_nearest_street(row['x'], row['y'], lookup_edges)
 							if searching == 1:
 								edges.append(edge1)
 								fracs.append(frac1)
 							else:
-								broken_chain[i+1] = 0
-								edges.append(newedge1)
-								fracs.append(newfrac1)
+								if (newedge1[1] == edge2[1]) and ((edge2[1],edge2[0]) in edge_dict):
+									broken_chain[i+1] = 0
+									edges.append(newedge1)
+									fracs.append(newfrac1)
+								elif (newedge1[1] == edge2[1]) and ((edge2[1],edge2[0]) not in edge_dict):
+									edges.append(edge1)
+									fracs.append(frac1)
+								else:
+									broken_chain[i+1] = 0
+									edges.append(newedge1)
+									fracs.append(newfrac1)
 					else:
 						edges.append(edge1)
 						fracs.append(frac1)
@@ -564,25 +615,35 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 						searching = 1
 						radius = 1
 						edge_reverse = (edge1[1], edge1[0])
-						checked_edges = set(edge_reverse)
+						checked_edges = set([edge_reverse])
 						while searching:
 							radius += 1
-							lookup_edges = get_lookup_edges(G,stopnode,radius)
+							if radius <= 4:
+								lookup_edges = get_lookup_edges(G,stopnode,radius)
+							else:
+								lookup_edges = coord_lookup[(format(x2,'.2f'),format(y2,'.2f'))]
 							lookup_edges.add(edge1)
 							lookup_edges = lookup_edges.difference(checked_edges)
 							checked_edges = checked_edges.union(lookup_edges)
 							edge2, frac2, searching = find_nearest_street(x2, y2, lookup_edges)
+							if (radius == 5) and (searching == 1):
+								searching = 0
+								broken_chain[i+1] = -1
 
 						if edge1 == edge2:
 							broken_chain[i+1] = 0
 						elif edge1[1] == edge2[0]:
 							broken_chain[i+1] = 0
-						elif edge1[1] == edge2[1]:
+						elif (edge1[1] == edge2[1]) and ((edge2[1],edge2[0]) in edge_dict):
 							broken_chain[i+1] = 0
 
-
+		data = data.iloc[np.where(broken_chain != -1)[0]]
 		data['edge'] = edges
 		data['fraction'] = fracs
+
+		ride = data.iloc[0]['ride']
+		if ride%50 == 0:
+			print ride
 		return data
 
 	def find_nearest_street(x, y, edges):
@@ -596,7 +657,7 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 				min_edge = edge
 				min_frac = frac
 		if min_dist == 9999:
-			return (0,0), 0, 1
+			return (-1,-1), 0, 1
 		else:
 			return min_edge, min_frac, 0
 
@@ -782,7 +843,7 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 
 	# 	return np.vstack([newy, newx, edges, fracs]).T, transedges, error, troublemakers
 
-	uber_df = uber_df.groupby('ride').apply(mapping)
+	uber_df = uber_df[uber_df['ride'] >= 9450].groupby('ride').apply(mapping)
 	print 'found nearest edges'
 	newy, newx = update_loc(uber_df['edge'], uber_df['fraction'])
 	uber_df.ix[:,['y','x']] = np.vstack([newy, newx]).T
@@ -904,21 +965,26 @@ def get_edge_weights(data, args):
 def main():
 	from_pickle = 0
 
-	xmax = -122.417
-	xmin = -122.420
-	ymin = 37.76181
-	ymax = 37.7655
+	# xmax = -122.417
+	# xmin = -122.420
+	# ymax = 37.7655
+	# ymin = 37.76181
+
+	xmax = -122.36
+	xmin = -122.50
+	ymax = 37.82
+	ymin = 37.71
 
 	uber_df = load_uber()
 	print 'loaded uber_df'
 
-	# uber_df = uber_df[uber_df['x'] >= xmin]
-	# uber_df = uber_df[uber_df['x'] <= xmax]
-	# uber_df = uber_df[uber_df['y'] >= ymin]
-	# uber_df = uber_df[uber_df['y'] <= ymax]
+	uber_df = uber_df[uber_df['x'] >= xmin]
+	uber_df = uber_df[uber_df['x'] <= xmax]
+	uber_df = uber_df[uber_df['y'] >= ymin]
+	uber_df = uber_df[uber_df['y'] <= ymax]
 
 	# resample to fill in gaps, need to implement my own interpolation function
-	# uber_df.set_index('datetime').resample('4000L').reset_index(inplace=True)
+	uber_df.set_index('datetime').resample('4000L',fill_method='pad').reset_index(inplace=True)
 
 	if from_pickle:
 		street_df = pickle.load(open('pickles/street_df.pkl','rb'))
@@ -943,9 +1009,9 @@ def main():
 		uber_df = pickle.load(open('pickles/uber_df_projected.pkl'))
 		print 'read projected uber data'
 	else:
-		street_df = load_streets(n=1)
-		pickle.dump(street_df,open('pickles/street_df.pkl','wb'))
-		# street_df = pickle.load(open('pickles/street_df.pkl','rb'))
+		# street_df = load_streets(n=1)
+		# pickle.dump(street_df,open('pickles/street_df.pkl','wb'))
+		street_df = pickle.load(open('pickles/street_df.pkl','rb'))
 		# street_df = street_df = street_df[(street_df['xstart'] >= xmin) & (street_df['xstart'] <= xmax) &
 		# 	(street_df['xstop'] >= xmin) & (street_df['xstop'] <= xmax) &
 		# 	(street_df['ystart'] >= ymin) & (street_df['ystart'] <= ymax) &
