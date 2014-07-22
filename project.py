@@ -24,6 +24,9 @@ from sklearn.linear_model import LinearRegression
 from sklearn import cluster, datasets 
 from sklearn.preprocessing import StandardScaler
 
+radius = 3963.1676
+rad_x = 3963.1676*np.cos(37.7833*math.pi/180)
+
 # Central finite difference function to estimate derivatives
 def deriv(x):
 	"Finite difference derivative of the function f"
@@ -60,6 +63,9 @@ def load_uber(nlines=-1):
 
 	# resample to every 2 seconds?
 	return uber_df.iloc[:nlines]
+
+def fill_timeseries(data):
+	return data.set_index('datetime').resample('4000L',fill_method='pad').reset_index(inplace=True)
 
 '''
 load street geo data from json into DataFrame
@@ -211,13 +217,6 @@ def load_streets(n=0):
 			(df['ystop'] >= 37) & (df['ystop'] <= 38)]
 
 	return df
-
-'''
-Truncates/pads a float f to n decimal places without rounding
-'''
-def trunc(f, n=2):
-    slen = len('%.*f' % (n, f))
-    return str(f)[:slen]
 
 '''
 Create directed street network graph from street DataFrame
@@ -380,7 +379,12 @@ def create_transition_graph(G, node_dict, edge_dict):
 	for newstop, oldstop in stop_dict.iteritems():
 		if oldstop in start_dict:
 			for newstart in start_dict[oldstop]:
-				newG.add_path([newstop, newstart], weight=0.01)
+				newG.add_path([newstop, newstart], weight=9999)
+
+	for edge in newG.edges():
+		if edge not in trans_edge_dict:
+			oldedge1 = (transnode_node_dict[edge[0]], transnode_node_dict[edge[0]])
+			oldedge2 = (transnode_node_dict[edge[1]], transnode_node_dict[edge[1]])
 
 	return newG, trans_edge_dict, edge_trans_dict, transnode_node_dict
 
@@ -396,6 +400,22 @@ def point_to_line(point, start, stop, edge_len, edge_vec):
 	dist = startpoint_len * sinang
 	frac = startpoint_len * cosang / edge_len
 	return dist, frac
+
+'''
+create label for consecutive edges
+'''
+def consecutive_edges(df):
+	nrows = len(df)
+	cons_edges = np.zeros((nrows,1))
+	edgecount = 0
+	for i in xrange(1, nrows):
+		edge1 = df.iloc[i - 1]['edge']
+		edge2 = df.iloc[i]['edge']
+		if edge1 != edge2:
+			edgecount += 1
+		cons_edges[i] = edgecount
+	df['consecutive_edges'] = cons_edges
+	return df
 
 '''
 project coordinates onto street graph, and then onto transition graph
@@ -853,11 +873,13 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 
 	# 	return np.vstack([newy, newx, edges, fracs]).T, transedges, error, troublemakers
 
-	uber_df = uber_df[uber_df['ride'] >= 18100].groupby('ride').apply(mapping)
+	uber_df = uber_df[uber_df['ride'] >= 21100].groupby('ride').apply(mapping)
 	# uber_df = uber_df.groupby('ride').apply(mapping)
 	print 'found nearest edges'
+	uber_df = consecutive_edges(uber_df)
 	newy, newx = update_loc(uber_df['edge'], uber_df['fraction'])
 	uber_df.ix[:,['y','x']] = np.vstack([newy, newx]).T
+
 
 	# for ride in rides:
 	# tmp = uber_df[['x','y']].apply(find_nearest_street, axis=1)
@@ -888,9 +910,6 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 	return uber_df
 
 def compute_speed(uber_df):
-	radius = 3963.1676
-	rad_x = 3963.1676*np.cos(37.7833*math.pi/180)
-
 	grouped = uber_df.groupby(['ride'])
 	count = 0
 	for ride, group in grouped:
@@ -964,38 +983,38 @@ def get_clusters(X, n=4):
 
 	return model.predict(X), model.cluster_centers_
 
-'''
-compute edge weights for non-transition edges
-'''
-def get_edge_weights(data, args):
-	trans_edge_dict, edge_dict = args
-	edge = trans_edge_dict[data['trans_edge'].iloc[0]]
-	name, class_, length, vec = edge_dict[edge]
-	return np.mean(data['speed']**(-1)) * length
+
 
 def main():
 	from_pickle = 0
 
-	# xmax = -122.417
-	# xmin = -122.420
-	# ymax = 37.7655
-	# ymin = 37.76181
+	xmax = -122.417
+	xmin = -122.420
+	ymax = 37.7655
+	ymin = 37.76181
 
-	xmax = -122.36
-	xmin = -122.50
-	ymax = 37.82
-	ymin = 37.71
+	# xmax = -122.36
+	# xmin = -122.50
+	# ymax = 37.82
+	# ymin = 37.71
+
+	print '\n\n\n\n\n'
+	print 'HELLO WORLD'
+	print 'loading uber_df...'
 
 	uber_df = load_uber()
 	print 'loaded uber_df'
 
-	uber_df = uber_df[uber_df['x'] >= xmin]
-	uber_df = uber_df[uber_df['x'] <= xmax]
-	uber_df = uber_df[uber_df['y'] >= ymin]
-	uber_df = uber_df[uber_df['y'] <= ymax]
+	# uber_df = uber_df[uber_df['x'] >= xmin]
+	# uber_df = uber_df[uber_df['x'] <= xmax]
+	# uber_df = uber_df[uber_df['y'] >= ymin]
+	# uber_df = uber_df[uber_df['y'] <= ymax]
+
+	# pickle.dump(uber_df,open('pickles/uber_df_subset.pkl','wb'))
+	uber_df = pickle.load(open('pickles/uber_df_subset.pkl'))
 
 	# resample to fill in gaps, need to implement my own interpolation function
-	uber_df.set_index('datetime').resample('4000L',fill_method='pad').reset_index(inplace=True)
+	#uber_df = uber_df.groupby('ride').apply(fill_timeseries)
 
 	if from_pickle:
 		street_df = pickle.load(open('pickles/street_df.pkl','rb'))
@@ -1076,12 +1095,58 @@ def main():
 	# uber_df = pickle.load(open('pickles/uber_df_clustered.pkl','rb'))
 	# centroids = pickle.load(open('pickles/centroids.pkl','rb'))
 
+	'''
+	compute edge weights for non-transition edges
+	'''
+	def get_edge_weights(data, args):
+		ipdb.set_trace()
+		edge_dict, edge_trans_dict = args
+		times = np.zeros((len(cons_edges),1))
+		cons_edges = data['consecutive_edges'].unique
+		for i, cons_edge in enumerate(cons_edges):
+			subdf = data[data['consecutive_edges'] == cons_edge]
+			wait_times[i] = 4 * (len(subdf) - len(subdf[subdf['speed'] == 0]))
+			times[i] = 4 * (len(subdf) - len(subdf[subdf['speed'] != 0]))
+
+		times_dict = {}
+		i = 0
+		for j in xrange(len(data)-1):
+			edge1 = data.iloc[j]['edge']
+			edge2 = data.iloc[j+1]['edge']
+			if edge1 != edge2:
+				trans_edge = edge_trans_dict[edge1]
+				if trans_edge in times_dict:
+					times_dict[trans_edge].append(times[i])
+				else:
+					times_dict[trans_edge] = [times[i]]
+				if edge1[1] == edge2[0]:
+					trans_edge = (edge_trans_dict[edge1][1],edge_trans_dict[edge2[0]])
+					if trans_edge in times_dict:
+						times_dict[trans_edge].append(wait_times[i])
+					else:
+						times_dict[trans_edge] = [wait_times[i]]
+				'''
+				the following snippet adds wait time weights to all potential transitions in transition graph
+				this can potentially allow illegal turns, which is currently prevented with a large prior weight
+				'''
+				# else:
+				# 	for nodej in G.neighbors(edge1[1]):
+				# 		trans_edge = (edge_trans_dict[edge1][1],nodej)
+				# 		if trans_edge in times_dict:
+				# 			times_dict[trans_edge].append(wait_times[i])
+				# 		else:
+				# 			times_dict[trans_edge] = [wait_times[i]]
+				i += 1
+
+		return times_dict
+
 	nclusters = centroids.shape[0]
 	cluster_graphs = []
 	for i in xrange(nclusters):
 		clone_graph = transition_graph
-		df = uber_df[uber_df['cluster'] == i][['speed','trans_edge']]
-		edge_weights_df = df.groupby('trans_edge')[['trans_edge','speed']].apply(get_edge_weights, args=(trans_edge_dict,edge_dict))
+		df = uber_df[uber_df['cluster'] == i][['ride','speed','edge','consecutive_edges','trans_edge']]
+		grouped = df.groupby('ride')
+		times_dict = grouped[['edge','consecutive_edges','speed']].apply(get_edge_weights, args=(edge_dict, edge_trans_dict))
 		edge_weights_dict = edge_weights_df.to_dict()
 		edges = df['trans_edge'].unique()
 		for edge, weight in edge_weights_dict.iteritems():
