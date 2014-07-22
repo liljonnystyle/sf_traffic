@@ -12,9 +12,7 @@ import sys
 import pickle
 import math
 import ipdb
-# import psycopg2 as psycho
 
-from pygeocoder import Geocoder, GeocoderError
 from collections import Counter
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import pdist, squareform
@@ -65,7 +63,22 @@ def load_uber(nlines=-1):
 	return uber_df.iloc[:nlines]
 
 def fill_timeseries(data):
-	return data.set_index('datetime').resample('4000L',fill_method='pad').reset_index(inplace=True)
+    nrows = len(data)
+    newdf = pd.DataFrame(columns = data.columns)
+    rowcount = 0
+    for i in xrange(nrows-1):
+        row = data.iloc[i]
+        newdf.loc[rowcount,:] = row
+        rowcount += 1
+        date1 = row['datetime']
+        missing_rows = int(ceil((data.iloc[i+1]['datetime'] - date1).seconds/4.)-1)
+        for j in xrange(missing_rows):
+            row['datetime'] = date1 + timedelta(seconds=4)
+            newdf.loc[rowcount,:] = row
+            rowcount += 1
+            date1 = row['datetime']
+
+    return newdf
 
 '''
 load street geo data from json into DataFrame
@@ -324,7 +337,7 @@ def create_graph(df):
 
 	'''
 	edge_dict keyed on node-node tuple
-	values are list of street name, edge length, edge unit vec
+	values are list of street name, street class, edge length, edge unit vec
 	'''
 	return G, node_coord_dict, coord_node_dict, edge_dict, coord_lookup
 
@@ -1051,35 +1064,35 @@ def make_cluster_graphs(centroids, transition_graph, uber_df, edge_dict, edge_tr
 	return cluster_graphs
 
 def main():
-	from_pickle = 1
+	from_pickle = 0
 
-	xmax = -122.417
-	xmin = -122.420
-	ymax = 37.7655
-	ymin = 37.76181
+	# xmax = -122.417
+	# xmin = -122.420
+	# ymax = 37.7655
+	# ymin = 37.76181
 
-	# xmax = -122.36
-	# xmin = -122.50
-	# ymax = 37.82
-	# ymin = 37.71
+	xmax = -122.36
+	xmin = -122.50
+	ymax = 37.82
+	ymin = 37.71
 
 	print '\n\n\n\n\n'
 	print 'HELLO WORLD'
 	print 'loading uber_df...'
 
-	# uber_df = load_uber()
+	uber_df = load_uber()
 
-	# uber_df = uber_df[uber_df['x'] >= xmin]
-	# uber_df = uber_df[uber_df['x'] <= xmax]
-	# uber_df = uber_df[uber_df['y'] >= ymin]
-	# uber_df = uber_df[uber_df['y'] <= ymax]
+	uber_df = uber_df[uber_df['x'] >= xmin]
+	uber_df = uber_df[uber_df['x'] <= xmax]
+	uber_df = uber_df[uber_df['y'] >= ymin]
+	uber_df = uber_df[uber_df['y'] <= ymax]
 
-	# pickle.dump(uber_df,open('pickles/uber_df_subset.pkl','wb'))
-	uber_df = pickle.load(open('pickles/uber_df_subset.pkl'))
+	pickle.dump(uber_df,open('pickles/uber_df_subset.pkl','wb'))
+	# uber_df = pickle.load(open('pickles/uber_df_subset.pkl'))
 	print 'loaded uber_df'
 
 	# resample to fill in gaps, need to implement my own interpolation function
-	#uber_df = uber_df.groupby('ride').apply(fill_timeseries)
+	uber_df = uber_df.groupby('ride').apply(fill_timeseries)
 
 	if from_pickle:
 		print 'reading street df from pickle...'
