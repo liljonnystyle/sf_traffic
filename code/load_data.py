@@ -17,6 +17,10 @@ assemble transition graph
 '''
 def load_fresh():
 	print 'loading uber_df from csv...'
+	# xmax = -122.36
+	# xmin = -122.4
+	# ymax = 37.75
+	# ymin = 37.71
 	xmax = -122.36
 	xmin = -122.50
 	ymax = 37.82
@@ -29,8 +33,10 @@ def load_fresh():
 	uber_df = uber_df[uber_df.groupby(['ride'])['ride'].transform('count') >= 3]
 	uber_df = uber_df.groupby('ride').apply(fill_timeseries)
 	uber_df = uber_df.drop(['ride'],axis=1).reset_index().drop(['level_1'],axis=1)
+	uber_df = uber_df.dropna()
+	print len(uber_df)
 	print 'loaded uber_df'
-	pickle.dump(uber_df,open('../pickles/uber_df_subset.pkl','wb'))
+	pickle.dump(uber_df,open('../pickles/uber_df.pkl','wb'))
 
 	print 'loading street df from json...'
 	street_df = load_streets(n=1)
@@ -67,7 +73,7 @@ read transition graph from pickle
 '''
 def from_pickle():
 	print 'reading uber_df from pickle...'
-	uber_df = pickle.load(open('../pickles/uber_df_subset.pkl'))
+	uber_df = pickle.load(open('../pickles/uber_df.pkl'))
 	print 'read uber_df'
 	uber_df = uber_df.groupby('ride').apply(fill_timeseries)
 

@@ -119,6 +119,8 @@ def get_features(df):
 	'''
 	def mfp(data):
 		nz = np.where(np.append(0,data) == 0, 0, 1) # flag non-zeros
+		if len(np.where(np.diff(nz) == 1)[0]) == 0:
+			ipdb.set_trace()
 		return 4.0*sum(nz)/len(np.where(np.diff(nz) == 1)[0]) #mean free path in seconds
 	
 	X['mfp'] = df.groupby('ride')['speed'].apply(mfp)
