@@ -2,6 +2,18 @@
 import project
 from pygeocoder import Geocoder
 from optparse import OptionParser
+from googlemaps import GoogleMaps
+
+def get_gmaps_dirs(source,destination):
+	apikeys = [AIzaSyBMTLIl73fU5XRJLvug1T_yVUhpJQQoNCw]
+
+	keycount = 0
+	# try:
+	directions = GoogleMaps(apikey[keycount]).directions(source,destination)
+	# except:
+
+	for step in directions['Directions']['Routes'][0]['Steps']:
+		print step['descriptionHtml']
 
 def get_edge(address):
 	apikeys = ['AIzaSyDFKC9RzHpgfCdnslTL0QXNHO_JpWcYXuQ',
@@ -16,6 +28,7 @@ def get_edge(address):
 				'AIzaSyC7RykRoFJY_fgBDt-vG_JPjDc3BmECCWQ',
 				'AIzaSyD_KHdVxL_r3s2JLFeu-qFG7dhiYsrTISU']
 
+	keycount = 0
 	try:
 		lat,lng = Geocoder(apikeys[keycount]).geocode(address)[0].coordinates
 	except GeocoderError, e:
@@ -92,6 +105,8 @@ def main():
 			coord1 = node_coord_dict[edge[0]]
 			coord2 = node_coord_dict[edge[1]]
 			print edge_dict[edge][0] + ': ' + str(coord1)
+
+	get_gmaps_dirs(source,destination)
 
 if __name__ == '__main__':
 	main()
