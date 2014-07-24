@@ -12,8 +12,8 @@ html, body, #map-canvas {
     left: 100px;
     top: 10px;
     background-color: white;
-    opacity: 0.6;
-    filter: alpha(opacity=60);
+    opacity: 0.65;
+    filter: alpha(opacity=65);
     width: 300px;
     border: 1px solid gray;
     padding: 10px;
@@ -31,8 +31,8 @@ html, body, #map-canvas {
     left: 100px;
     top: 150px;
     background-color: white;
-    opacity: 0.6;
-    filter: alpha(opacity=60);
+    opacity: 0.65;
+    filter: alpha(opacity=65);
     width: 300px;
     height: 600px;
     border: 1px solid gray;
@@ -53,6 +53,13 @@ html, body, #map-canvas {
   background-color: rgba(204, 0, 102, 0);
   -webkit-border-radius:15px;
   -moz-border-radius:15px;
-  font-size: 15px;
-  text-align: center;
 }
+
+.legend {
+  position: relative;
+  left: 20px;
+  font-size: 12px;
+  text-align: left;
+}
+
+

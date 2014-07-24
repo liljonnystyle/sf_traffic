@@ -1,5 +1,9 @@
 var JRoutingMapper = {
   updateMap: function (source, destination, time) {
+    for (var i = 0; i < JRoutingMapper.lines.length; i += 1) {
+      JRoutingMapper.lines[i].setMap(null)
+    }
+    JRoutingMapper.lines = []
   // Make request to /routing that responds with lat/long's for route
     $.ajax({
       url: 'routing',
@@ -11,26 +15,21 @@ var JRoutingMapper = {
       },
       success: function (data) {
         // Update the line and symbol
-        // JRoutingMapper.clearLines();
-        var max_eta = 0
+        JRoutingMapper.map.setCenter({lat: data.lat, lng: data.lng})
+        JRoutingMapper.map.setZoom(14)
         for (var i = 0; i < data.etas.length; i += 1) {
-          if (data.etas[i] > max_eta) {
-            max_eta = data.etas[i]
-          }
-        };
-        for (var i = 0; i < data.etas.length; i += 1) {
-          JRoutingMapper.drawPolyline(data.points[i], data.etas[i], max_eta, i);
+          JRoutingMapper.lines.push(JRoutingMapper.drawPolyline(data.points[i], data.etas[i], data.max_eta, i));
         };
         JRoutingMapper.writeOutput(data.etas);
       }
     })
   },
 
-  // TODO: Make sure you clear old polylines and symbols
   drawPolyline: function (points, eta, max_eta, line_no) {
     var coords = [];
+
     for (var i = 0; i < points.length; i += 1) {
-      coords.push(new google.maps.LatLng(points[i][0], points[i][1]));
+      coords.push(new google.maps.LatLng(points[i][0] + (line_no*0.00005) - 0.0001, points[i][1] + (line_no*0.00005) - 0.0001));
     }
     
     var colors = ['blue', 'red', 'green', 'black'];
@@ -48,16 +47,20 @@ var JRoutingMapper = {
     var line = new google.maps.Polyline({
       path: coords,
       icons: [symbol],
-      map: JRoutingMapper.map
+      map: JRoutingMapper.map,
+      strokeWeight: 2,
+      strokeOpacity: 0.6,
+      strokeColor: colors[line_no % colors.length]
     });
 
     JRoutingMapper.animateCircle(line, max_eta, eta);
+    return line;
   },
 
   animateCircle: function (line, max_eta, eta) {
     var count = 0;
     window.setInterval(function() {
-      count = (count + 1) % (max_eta * 100);
+      count = (count + 1) % (max_eta * 105);
       // speed += 0.01;
       var icons = line.get('icons');
       if (count / eta >= 100) {
@@ -66,7 +69,7 @@ var JRoutingMapper = {
         icons[0].offset = (count / eta) + '%';
       };
       line.set('icons', icons);
-    }, 5);
+    }, 3);
   },
 
   writeOutput: function (etas) {
@@ -75,8 +78,8 @@ var JRoutingMapper = {
     var out = ''
     for (var i = 0; i < etas.length; i += 1) {
       out += "<div class='symbol' style='border: 6px solid " + colors[i%4] + ";'></div>"
-      out += '<p>' + clusters[i] + '</p>'
-      out += '<p>ETA: ' + String(etas[i]) + ' Minutes</p>'
+      out += "<p class='legend'>" + clusters[i] + '</p>'
+      out += "<p class='legend'>ETA: " + String(etas[i]) + ' Minutes</p>'
     }
     document.getElementById('out-box').innerHTML=out;
   },
@@ -91,6 +94,7 @@ var JRoutingMapper = {
 
     JRoutingMapper.map = new google.maps.Map(document.getElementById('map-canvas'),
         mapOptions);
+    JRoutingMapper.lines = []
 
     // When user has submitted source and destination
     $('#nav-box').find('form').on('submit', function (e) {

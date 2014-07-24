@@ -1,7 +1,6 @@
 #!/usr/bin/python
 import pickle
 from pygeocoder import Geocoder, GeocoderError
-from optparse import OptionParser
 from googlemaps import GoogleMaps
 import numpy as np
 import networkx as nx
@@ -54,7 +53,7 @@ def get_gmaps_dirs(source,destination):
 
 	keycount = 0
 	# try:
-	directions = GoogleMaps(apikey[keycount]).directions(source,destination)
+	directions = GoogleMaps(apikeys[keycount]).directions(source,destination)
 	# except:
 
 	print 'Google Maps Directions:\n'
@@ -94,7 +93,7 @@ def get_edge(address, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
 	lookup_edges = coord_lookup[(format(lng,'.2f'),format(lat,'.2f'))]
 	edge, frac, searching = find_nearest_street(lng, lat, lookup_edges, node_coord_dict, edge_dict)
 
-	return edge_trans_dict[edge], frac
+	return edge_trans_dict[edge], edge, frac
 
 @app.route('/routing')
 def routing():
@@ -107,41 +106,46 @@ def routing():
 	else:
 		inds = [8, 9, 10, 11]
 
-	# sc_edge, sc_frac = get_edge(source, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
-	# ds_edge, ds_frac = get_edge(dest, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
+	sc_transedge, sc_edge, sc_frac = get_edge(source, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
+	ds_transedge, ds_edge, ds_frac = get_edge(dest, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
 
-	# if sc_frac > 0.5:
-	# 	sc_node = sc_edge[1]
-	# else:
-	# 	sc_node = sc_edge[0]
+	if sc_frac > 0.5:
+		sc_node = sc_transedge[1]
+		sc_lng, sc_lat = node_coord_dict[sc_edge[1]]
+	else:
+		sc_node = sc_transedge[0]
+		sc_lng, sc_lat = node_coord_dict[sc_edge[0]]
 
-	# if ds_frac > 0.5:
-	# 	ds_node = ds_edge[1]
-	# else:
-	# 	ds_node = ds_edge[0]
-
-	sc_lat,sc_lng = Geocoder().geocode(source)[0].coordinates
-	ds_lat,ds_lng = Geocoder().geocode(dest)[0].coordinates
+	if ds_frac > 0.5:
+		ds_node = ds_transedge[1]
+		ds_lng, ds_lat = node_coord_dict[ds_edge[1]]
+	else:
+		ds_node = ds_transedge[0]
+		ds_lng, ds_lat = node_coord_dict[ds_edge[0]]
 
 	ret = {'points': [], 'etas': []}
+	ret['lat'] = (sc_lat+ds_lat)/2.0
+	ret['lng'] = (sc_lng+ds_lng)/2.0
 	for i in inds:
+		transition_graph = cluster_graphs[i]
+		path = nx.astar_path(transition_graph,sc_node,ds_node)
+		eta = 0
 		coords = []
-		coords.append((sc_lat, sc_lng))
-		coords.append((sc_lat+0.05*(0.5-random.random()),sc_lng+0.05*(0.5-random.random())))
-		coords.append((ds_lat+0.05*(0.5-random.random()),ds_lng+0.05*(0.5-random.random())))
-		coords.append((ds_lat, ds_lng))
-		# transition_graph = cluster_graphs[i]
-		# path = nx.astar_path(transition_graph,sc_node,ds_node)
-		# eta = 0
-		# coords = []
-		# for j in xrange(len(path)-1):
-		# 	edge = trans_edge_dict[(path[j],path[j+1])]
-		# 	coords.append(node_coord_dict[edge[0]])
-		# 	eta += transition_graph[path[j]][path[j+1]]['weight']
+		for j in xrange(len(path)-1):
+			trans_edge = (path[j],path[j+1])
+			if trans_edge in trans_edge_dict:
+				edge = trans_edge_dict[trans_edge]
+				coord = node_coord_dict[edge[0]]
+				coord = (coord[1], coord[0])
+				coords.append(coord)
+				old_coord = node_coord_dict[edge[1]]
+				old_coord = (old_coord[1], old_coord[0])
+			else:
+				coords.append(old_coord)
+			eta += transition_graph[path[j]][path[j+1]]['weight']
 		ret['points'].append(coords)
-		ret['etas'].append(5+i)
-	# ret['lat'] = (maxlat-minlat)/2
-	# ret['lng'] = (maxlng-minlng)/2
+		ret['etas'].append(int(eta/60))
+	ret['max_eta'] = max(ret['etas'])
 	return jsonify(ret)
 
 @app.route('/', methods = ['GET'])
