@@ -11,25 +11,23 @@ var JRoutingMapper = {
       },
       success: function (data) {
         // Update the line and symbol
-
         // JRoutingMapper.clearLines();
-
+        var max_eta = 0
         for (var i = 0; i < data.etas.length; i += 1) {
-          JRoutingMapper.drawPolyline(data.points[i], data.etas[i], i);
-        }
+          if (data.etas[i] > max_eta) {
+            max_eta = data.etas[i]
+          }
+        };
+        for (var i = 0; i < data.etas.length; i += 1) {
+          JRoutingMapper.drawPolyline(data.points[i], data.etas[i], max_eta, i);
+        };
         JRoutingMapper.writeOutput(data.etas);
-
-        // var mapOptions = {
-          
-        //   zoom: 11
-        // };
-        JroutingMapper.map.mapOptions.zoom = 11
       }
     })
   },
 
   // TODO: Make sure you clear old polylines and symbols
-  drawPolyline: function (points, eta, line_no) {
+  drawPolyline: function (points, eta, max_eta, line_no) {
     var coords = [];
     for (var i = 0; i < points.length; i += 1) {
       coords.push(new google.maps.LatLng(points[i][0], points[i][1]));
@@ -40,7 +38,7 @@ var JRoutingMapper = {
     var symbol = {
       icon: {
         path: google.maps.SymbolPath.CIRCLE,
-        scale: 5,
+        scale: 6,
         strokeColor: colors[line_no % colors.length]
       },
       offset: '100%'
@@ -53,16 +51,20 @@ var JRoutingMapper = {
       map: JRoutingMapper.map
     });
 
-    JRoutingMapper.animateCircle(line, eta);
+    JRoutingMapper.animateCircle(line, max_eta, eta);
   },
 
-  animateCircle: function (line, eta) {
+  animateCircle: function (line, max_eta, eta) {
     var count = 0;
     window.setInterval(function() {
-      count = (count + 1) % (eta * 100);
+      count = (count + 1) % (max_eta * 100);
       // speed += 0.01;
       var icons = line.get('icons');
-      icons[0].offset = (count / eta) + '%';
+      if (count / eta >= 100) {
+        icons[0].offset = '100%';
+      } else {
+        icons[0].offset = (count / eta) + '%';
+      };
       line.set('icons', icons);
     }, 5);
   },
@@ -76,7 +78,6 @@ var JRoutingMapper = {
       out += '<p>' + clusters[i] + '</p>'
       out += '<p>ETA: ' + String(etas[i]) + ' Minutes</p>'
     }
-    console.log(out)
     document.getElementById('out-box').innerHTML=out;
   },
 
