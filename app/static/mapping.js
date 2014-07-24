@@ -18,6 +18,12 @@ var JRoutingMapper = {
           JRoutingMapper.drawPolyline(data.points[i], data.etas[i], i);
         }
         JRoutingMapper.writeOutput(data.etas);
+
+        // var mapOptions = {
+          
+        //   zoom: 11
+        // };
+        JroutingMapper.map.mapOptions.zoom = 11
       }
     })
   },

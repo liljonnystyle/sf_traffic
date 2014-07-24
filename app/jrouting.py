@@ -140,6 +140,8 @@ def routing():
 		# 	eta += transition_graph[path[j]][path[j+1]]['weight']
 		ret['points'].append(coords)
 		ret['etas'].append(5+i)
+	# ret['lat'] = (maxlat-minlat)/2
+	# ret['lng'] = (maxlng-minlng)/2
 	return jsonify(ret)
 
 @app.route('/', methods = ['GET'])
