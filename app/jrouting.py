@@ -100,11 +100,11 @@ def routing():
 	source, dest, time = request.args['source'], request.args['destination'], request.args['time']
 
 	if time == 'morning':
-		inds = [0, 1, 2, 3]
+		inds = [0, 1]
 	elif time == 'afternoon':
-		inds = [4, 5, 6, 7]
+		inds = [2, 3]
 	else:
-		inds = [8, 9, 10, 11]
+		inds = [4, 5]
 
 	sc_transedge, sc_edge, sc_frac = get_edge(source, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
 	ds_transedge, ds_edge, ds_frac = get_edge(dest, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
@@ -144,7 +144,7 @@ def routing():
 				coords.append(old_coord)
 			eta += transition_graph[path[j]][path[j+1]]['weight']
 		ret['points'].append(coords)
-		ret['etas'].append(int(eta/60))
+		ret['etas'].append(format(eta/60,'.2f'))
 	ret['max_eta'] = max(ret['etas'])
 	return jsonify(ret)
 
