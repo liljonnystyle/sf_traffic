@@ -301,6 +301,8 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 	uber_df['trans_edge'] = uber_df['edge'].apply(lambda x: trans_dict[x])
 	print 'converted to transition edges'
 
+	uber_df = uber_df.drop(['ride'],axis=1).reset_index().drop(['level_1'],axis=1)
+	
 	return uber_df
 
 '''

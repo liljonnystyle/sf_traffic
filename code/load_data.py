@@ -5,6 +5,7 @@ import datetime
 import networkx as nx
 import json
 import pickle
+import cluster
 import ipdb
 
 from datetime import timedelta
@@ -30,11 +31,27 @@ def load_fresh():
 	uber_df = uber_df[uber_df['x'] <= xmax]
 	uber_df = uber_df[uber_df['y'] >= ymin]
 	uber_df = uber_df[uber_df['y'] <= ymax]
+	
 	uber_df = uber_df[uber_df.groupby(['ride'])['ride'].transform('count') >= 3]
 	uber_df = uber_df.groupby('ride').apply(fill_timeseries)
 	uber_df = uber_df.drop(['ride'],axis=1).reset_index().drop(['level_1'],axis=1)
 	uber_df = uber_df.dropna()
-	print len(uber_df)
+	
+	uber_df = uber_df.join(cluster.compute_speed(uber_df))
+	bad_rides = uber_df[uber_df['speed'] > 100]['ride'].unique()
+	uber_df = uber_df[~uber_df['ride'].isin(bad_rides)]
+
+	uber_df = uber_df.join(cluster.compute_accel(uber_df))
+	bad_rides = uber_df[uber_df['accel'] > 4].unique()
+	bad_rides.extend(uber_df[uber_df['accel'] < -10].unique())
+	bad_rides = set(bad_rides)
+	uber_df = uber_df[~uber_df['ride'].isin(bad_rides)]
+
+	uber_df.pop('speed')
+	uber_df.pop('accel')
+
+	print str(len(uber_df)) + ' timestamps'
+	print str(len(uber_df['ride'].unique())) + ' rides'
 	print 'loaded uber_df'
 	pickle.dump(uber_df,open('../pickles/uber_df.pkl','wb'))
 

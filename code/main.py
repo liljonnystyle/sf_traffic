@@ -14,8 +14,8 @@ def main():
 	import cluster
 	import cluster_graphs
 
-	data_from_pickle = 1
-	projection_from_pickle = 1
+	data_from_pickle = 0
+	projection_from_pickle = 0
 	clusters_from_pickle = 0
 
 	if data_from_pickle:
