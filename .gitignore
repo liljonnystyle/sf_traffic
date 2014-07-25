@@ -1,0 +1,12 @@
+*ipynb
+nad83/*.o
+code/*.pyc
+pickles/*
+*.pyc
+uber_data/*
+street_centerlines/*
+street_nodes/*
+traffic_density/*
+traffic_signals/*
+bus_data/*
+.ipynb_checkpoints/
