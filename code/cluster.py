@@ -21,6 +21,8 @@ def cluster(uber_df):
 	uber_df = uber_df.join(compute_accel(uber_df))
 
 	uber_df = flag_rushhour(uber_df)
+	tmp_dict = uber_df.groupby('ride')['rush_hour'].aggregate(lambda x: Counter(x).most_common(1)[0][0]).to_dict()
+	uber_df['rush_hour'] = uber_df['ride'].map(tmp_dict)
 
 	rush_hour_flags = ['none', 'morning', 'afternoon']
 	uber_df['cluster'] = None

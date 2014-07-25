@@ -17,14 +17,14 @@ assemble transition graph
 '''
 def load_fresh():
 	print 'loading uber_df from csv...'
-	# xmax = -122.36
-	# xmin = -122.4
-	# ymax = 37.75
-	# ymin = 37.71
 	xmax = -122.36
-	xmin = -122.50
-	ymax = 37.82
+	xmin = -122.4
+	ymax = 37.75
 	ymin = 37.71
+	# xmax = -122.36
+	# xmin = -122.50
+	# ymax = 37.82
+	# ymin = 37.71
 	uber_df = load_uber()
 	uber_df = uber_df[uber_df['x'] >= xmin]
 	uber_df = uber_df[uber_df['x'] <= xmax]
@@ -441,9 +441,9 @@ def create_transition_graph(G, node_dict, edge_dict):
 			for newstart in start_dict[oldstop]:
 				newG.add_path([newstop, newstart], weight=9999)
 
-	for edge in newG.edges():
-		if edge not in trans_edge_dict:
-			oldedge1 = (transnode_node_dict[edge[0]], transnode_node_dict[edge[0]])
-			oldedge2 = (transnode_node_dict[edge[1]], transnode_node_dict[edge[1]])
+	# for edge in newG.edges():
+	# 	if edge not in trans_edge_dict:
+	# 		oldedge1 = (transnode_node_dict[edge[0]], transnode_node_dict[edge[0]])
+	# 		oldedge2 = (transnode_node_dict[edge[1]], transnode_node_dict[edge[1]])
 
 	return newG, trans_edge_dict, edge_trans_dict, transnode_node_dict
