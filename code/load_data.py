@@ -43,7 +43,7 @@ def load_fresh():
 
 	uber_df = uber_df.join(cluster.compute_accel(uber_df))
 	bad_rides = uber_df[uber_df['accel'] > 4]['ride'].unique()
-	bad_rides.extend(uber_df[uber_df['accel'] < -10]['ride'].unique())
+	bad_rides = np.append(bad_rides, uber_df[uber_df['accel'] < -10]['ride'].unique())
 	bad_rides = set(bad_rides)
 	uber_df = uber_df[~uber_df['ride'].isin(bad_rides)]
 
