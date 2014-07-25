@@ -18,14 +18,15 @@ assemble transition graph
 '''
 def load_fresh():
 	print 'loading uber_df from csv...'
-	xmax = -122.36
-	xmin = -122.4
-	ymax = 37.75
-	ymin = 37.71
 	# xmax = -122.36
-	# xmin = -122.50
-	# ymax = 37.82
+	# xmin = -122.4
+	# ymax = 37.75
 	# ymin = 37.71
+	xmax = -122.36
+	xmin = -122.50
+	ymax = 37.82
+	ymin = 37.71
+	
 	uber_df = load_uber()
 	uber_df = uber_df[uber_df['x'] >= xmin]
 	uber_df = uber_df[uber_df['x'] <= xmax]
@@ -38,10 +39,12 @@ def load_fresh():
 	uber_df = uber_df.dropna()
 	
 	uber_df = uber_df.join(cluster.compute_speed(uber_df))
+	pickle.dump(uber_df,open('../pickles/uber_df_speed.pkl','wb'))
 	bad_rides = uber_df[uber_df['speed'] > 100]['ride'].unique()
 	uber_df = uber_df[~uber_df['ride'].isin(bad_rides)]
 
 	uber_df = uber_df.join(cluster.compute_accel(uber_df))
+	pickle.dump(uber_df,open('../pickles/uber_df_accel.pkl','wb'))
 	bad_rides = uber_df[uber_df['accel'] > 4]['ride'].unique()
 	bad_rides = np.append(bad_rides, uber_df[uber_df['accel'] < -10]['ride'].unique())
 	bad_rides = set(bad_rides)
