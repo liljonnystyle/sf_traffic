@@ -6,9 +6,13 @@ import networkx as nx
 import json
 import pickle
 import cluster
+import math
 import ipdb
 
 from datetime import timedelta
+
+radius = 3963.1676
+rad_x = 3963.1676*np.cos(37.7833*math.pi/180)
 
 '''
 load uber_df from csv
@@ -38,20 +42,8 @@ def load_fresh():
 	uber_df = uber_df.drop(['ride'],axis=1).reset_index().drop(['level_1'],axis=1)
 	uber_df = uber_df.dropna()
 	
-	uber_df = uber_df.join(cluster.compute_speed(uber_df))
-	pickle.dump(uber_df,open('../pickles/uber_df_speed.pkl','wb'))
-	bad_rides = uber_df[uber_df['speed'] > 100]['ride'].unique()
-	uber_df = uber_df[~uber_df['ride'].isin(bad_rides)]
-
-	uber_df = uber_df.join(cluster.compute_accel(uber_df))
-	pickle.dump(uber_df,open('../pickles/uber_df_accel.pkl','wb'))
-	bad_rides = uber_df[uber_df['accel'] > 4]['ride'].unique()
-	bad_rides = np.append(bad_rides, uber_df[uber_df['accel'] < -10]['ride'].unique())
-	bad_rides = set(bad_rides)
-	uber_df = uber_df[~uber_df['ride'].isin(bad_rides)]
-
-	uber_df.pop('speed')
-	uber_df.pop('accel')
+	uber_df = cluster.filter_badrides(uber_df,pop=1)
+	# compute speed and accel, filter out bad rides, pop out speed and accel
 
 	print str(len(uber_df)) + ' timestamps'
 	print str(len(uber_df['ride'].unique())) + ' rides'
@@ -396,10 +388,10 @@ def create_graph(df):
 	for edge in G.edges_iter():
 		node1 = node_coord_dict[edge[0]]
 		node2 = node_coord_dict[edge[1]]
-		edge_len, edge_vec = edge_eval(node1,node2)
+		edge_len, edge_vec = edge_eval(node1,node2,to_miles=1)
 		edge_dict[edge].append(edge_len)
 		edge_dict[edge].append(edge_vec)
-		wt = edge_dict[edge][1]*edge_dict[edge][2]
+		wt = edge_dict[edge][2] * class_wt_dict[edge_dict[edge][1]] * 3600
 		G[edge[0]][edge[1]]['weight'] = wt
 
 	'''
@@ -412,7 +404,12 @@ def create_graph(df):
 INPUT: start and stop coordinates of a vector
 OUTPUT: length and unit vector
 '''
-def edge_eval(start, stop):
+def edge_eval(start, stop, to_miles=0):
+	if to_miles == 1:
+		start[0] *= 2 * math.pi * rad_x / 360
+		start[1] *= 2 * math.pi * radius / 360
+		stop[0] *= 2 * math.pi * rad_x / 360
+		stop[1] *= 2 * math.pi * radius / 360
 	length = ((start[0] - stop[0])**2 + (start[1] - stop[1])**2)**0.5
 	unit_vec = np.array([(stop[0] - start[0])/length, (stop[1] - start[1])/length])
 	return length, unit_vec
@@ -459,7 +456,7 @@ def create_transition_graph(G, node_dict, edge_dict):
 	for newstop, oldstop in stop_dict.iteritems():
 		if oldstop in start_dict:
 			for newstart in start_dict[oldstop]:
-				newG.add_path([newstop, newstart], weight=9999)
+				newG.add_path([newstop, newstart], weight=1000)
 
 	# for edge in newG.edges():
 	# 	if edge not in trans_edge_dict:

@@ -17,8 +17,10 @@ radius = 3963.1676
 rad_x = 3963.1676*np.cos(37.7833*math.pi/180)
 
 def cluster(uber_df):
-	uber_df = uber_df.join(compute_speed(uber_df))
-	uber_df = uber_df.join(compute_accel(uber_df))
+	#uber_df = filter_badrides(uber_df, pop=0)
+	#compute speed and accel, filter out bad rides
+	#pickle.dump(uber_df, open('../pickles/uber_df_filtered.pkl','wb'))
+	uber_df = pickle.load(open('../pickles/uber_df_filtered.pkl'))
 
 	uber_df = flag_rushhour(uber_df)
 	tmp_dict = uber_df.groupby('ride')['rush_hour'].aggregate(lambda x: Counter(x).most_common(1)[0][0]).to_dict()
@@ -30,8 +32,16 @@ def cluster(uber_df):
 	for i,flag in enumerate(rush_hour_flags):
 		flag_df = uber_df[uber_df['rush_hour'] == flag]
 		X = get_features(flag_df)
-		clusters, centers = get_clusters(X, n=4)
-		clusters += i*4
+		scaler = StandardScaler()
+		X_scaled = scaler.fit_transform(X)
+		clusters, centers = get_clusters(X_scaled, n=2)
+		centers = scaler.inverse_transform(centers)
+		if centers[0,0] > centers[1,0]:
+			fast_centers = centers[0,:]
+			centers[0,:] = centers[1,:]
+			centers[1,:] = fast_centers
+			clusters = np.where(clusters == 0, 1, 0)
+		clusters += i*2
 		if i == 0:
 			centroids = centers
 		else:
@@ -90,6 +100,27 @@ def compute_accel(uber_df):
 		count += 1
 	return acceldf
 
+def filter_badrides(uber_df, pop=1):
+	print 'computing speed'
+	uber_df = uber_df.join(compute_speed(uber_df))
+	print 'filtering bad speeds'
+	bad_rides = uber_df[uber_df['speed'] > 100]['ride'].unique()
+	uber_df = uber_df[~uber_df['ride'].isin(bad_rides)]
+
+	print 'computing accel'
+	uber_df = uber_df.join(compute_accel(uber_df))
+	print 'filtering bad accels and decels'
+	bad_rides = uber_df[uber_df['accel'] > 4]['ride'].unique()
+	bad_rides = np.append(bad_rides, uber_df[uber_df['accel'] < -10]['ride'].unique())
+	bad_rides = set(bad_rides)
+	uber_df = uber_df[~uber_df['ride'].isin(bad_rides)]
+
+	if pop == 1:
+		uber_df.pop('speed')
+		uber_df.pop('accel')
+
+	return uber_df
+
 '''
 create rush hour flag column in Uber DataFrame
 '''
@@ -105,16 +136,16 @@ def flag_rushhour(uber_df):
 	return reindexed_df.reset_index()
 
 def get_features(df):
-	X = pd.DataFrame(df.groupby('ride')['speed'].max())
+	X = pd.DataFrame(df[df['speed']>0].groupby('ride')['speed'].max())
 	X.columns = ['max_speed']
-	X['avg_speed'] = df.groupby('ride')['speed'].mean()
-	X['med_speed'] = df.groupby('ride')['speed'].median()
+	X['avg_speed'] = df[df['speed']>0].groupby('ride')['speed'].mean()
+	# X['med_speed'] = df[df['speed']>0].groupby('ride')['speed'].median()
 	X['max_accel'] = df[df['accel']>=0].groupby('ride')['accel'].max()
 	X['avg_accel'] = df[df['accel']>=0].groupby('ride')['accel'].mean()
-	X['med_accel'] = df[df['accel']>=0].groupby('ride')['accel'].median()
+	# X['med_accel'] = df[df['accel']>=0].groupby('ride')['accel'].median()
 	X['max_decel'] = df[df['accel']<=0].groupby('ride')['accel'].min()
 	X['avg_decel'] = df[df['accel']<=0].groupby('ride')['accel'].mean()
-	X['med_decel'] = df[df['accel']<=0].groupby('ride')['accel'].median()
+	# X['med_decel'] = df[df['accel']<=0].groupby('ride')['accel'].median()
 
 	'''
 	mean free path: average time driving in between stops (aka zero velocity timestamps)
@@ -134,7 +165,7 @@ compute kmeans clusters
 def get_clusters(X, n=4):
 	# distxy = squareform(pdist(X_scaled, metric='euclidean'))
 	# linkage(distxy, method='complete')
-	model = KMeans(n,n_jobs=-1)
+	model = KMeans(n)#,n_jobs=-1)
 	model.fit(X)
 
 	return model.predict(X), model.cluster_centers_

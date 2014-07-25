@@ -28,7 +28,8 @@ def get_edge_weights(data, args):
 				if times[i] != 0.0:
 					times_dict[trans_edge].append(times[i])
 			else:
-				times_dict[trans_edge] = [times[i]]
+				if times[i] != 0.0:
+					times_dict[trans_edge] = [times[i]]
 			if edge1[1] == edge2[0]:
 				trans_edge = (edge_trans_dict[edge1][1],edge_trans_dict[edge2][0])
 				if trans_edge in times_dict:

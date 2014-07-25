@@ -15,7 +15,7 @@ def main():
 	import cluster_graphs
 
 	data_from_pickle = 0
-	projection_from_pickle = 0
+	projection_from_pickle = 1
 	clusters_from_pickle = 0
 
 	if data_from_pickle:
@@ -30,7 +30,9 @@ def main():
 	''' apply Kalman filter first pass here, fix large errors '''
 
 	if projection_from_pickle:
+		print 'reading in projected uber_df from pickle...'
 		uber_df = pickle.load(open('../pickles/uber_df_projected.pkl'))
+		print 'read projected uber_df'
 	else:
 		uber_df = project.project(uber_df, street_graph, transition_graph, 
 			node_coord_dict, edge_dict, edge_trans_dict, coord_lookup)
