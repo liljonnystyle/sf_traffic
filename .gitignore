@@ -10,3 +10,6 @@ traffic_density/*
 traffic_signals/*
 bus_data/*
 .ipynb_checkpoints/
+here_app.txt
+liljonnystyle.pem
+uber_misc/*
