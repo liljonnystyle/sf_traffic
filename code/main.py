@@ -8,7 +8,7 @@ import cluster_graphs
 import ipdb
 
 def main():
-	data_from_pickle = 0
+	data_from_pickle = 1
 	projection_from_pickle = 1
 	clusters_from_pickle = 1
 

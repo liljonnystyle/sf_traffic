@@ -390,15 +390,17 @@ def create_graph(df):
 	for edge in G.edges_iter():
 		node1 = node_coord_dict[edge[0]]
 		node2 = node_coord_dict[edge[1]]
-		edge_len, edge_vec = edge_eval(node1,node2,to_miles=1)
+		edge_len, edge_vec = edge_eval(node1,node2,to_miles=0)
 		edge_dict[edge].append(edge_len)
 		edge_dict[edge].append(edge_vec)
-		wt = edge_dict[edge][2] * class_wt_dict[edge_dict[edge][1]] * 3600
+		edge_len, edge_vec = edge_eval(node1,node2,to_miles=1)
+		edge_dict[edge].append(edge_len)
+		wt = edge_dict[edge][4] * class_wt_dict[edge_dict[edge][1]] * 3600
 		G[edge[0]][edge[1]]['weight'] = wt
 
 	'''
 	edge_dict keyed on node-node tuple
-	values are list of street name, street class, edge length, edge unit vec
+	values are list of street name, street class, edge length, edge unit vec, edge length in miles
 	'''
 	return G, node_coord_dict, coord_node_dict, edge_dict, coord_lookup
 
@@ -465,8 +467,7 @@ def create_transition_graph(G, node_dict, edge_dict):
 			for newstart in start_dict[oldstop]:
 				newG.add_path([newstop, newstart], weight=1000)
 				new_edge = (newstop, newstart)
-				trans_dict[new_edge] = {'start_coord': node_dict[oldstop],
-										'stop_coord': node_dict[transnode_node_dict[newstart]],
+				trans_dict[new_edge] = {'coord': node_dict[oldstop],
 										'trans_edge': 1}
 
 	# for edge in newG.edges():

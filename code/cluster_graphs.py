@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import math
-import matplotlib.pyplot as plt
 import ipdb
 
 def get_edge_weights(data, args):
@@ -33,9 +32,15 @@ def get_edge_weights(data, args):
 			if edge1[1] == edge2[0]:
 				trans_edge = (data.iloc[j]['trans_edge'][1],data.iloc[j+1]['trans_edge'][0])
 				if trans_edge in times_dict:
-					times_dict[trans_edge].append(wait_times[i])
+					if wait_times[i] == 0.0:
+						times_dict[trans_edge].append(0.5)
+					else:
+						times_dict[trans_edge].append(wait_times[i])
 				else:
-					times_dict[trans_edge] = [wait_times[i]]
+					if wait_times[i] == 0.0:
+						times_dict[trans_edge] = [0.5]
+					else:
+						times_dict[trans_edge] = [wait_times[i]]
 			'''
 			the following snippet adds wait time weights to all potential transitions in transition graph
 			this can potentially allow illegal turns, which is currently prevented with a large prior weight
@@ -55,7 +60,7 @@ def make_cluster_graphs(centroids, transition_graph, uber_df, edge_dict, trans_d
 	nclusters = centroids.shape[0]
 	cluster_graphs = []
 	for i in xrange(nclusters):
-		clone_graph = transition_graph
+		clone_graph = transition_graph.copy()
 		df = uber_df[uber_df['cluster'] == i][['ride','speed','edge','consecutive_edges','trans_edge']]
 		grouped = df.groupby('ride')
 		times_group_dict = grouped[['edge','consecutive_edges','speed']].apply(get_edge_weights,
@@ -67,22 +72,9 @@ def make_cluster_graphs(centroids, transition_graph, uber_df, edge_dict, trans_d
 					edge_weights_dict[edge].extend(times)
 				else:
 					edge_weights_dict[edge] = times
-		# print str(len(clone_graph.edges())) + ' total edges'
-		# print str(len(edge_weights_dict.keys())) + ' updated edges'
-		# ipdb.set_trace()
-		plt.figure(figsize=(30,30))
+
 		for edge, weights in edge_weights_dict.iteritems():
-			# clone_graph[edge[0]][edge[1]]['weight'] = np.mean(weights)
-			xvec = [trans_dict[edge]['start_coord'][0], trans_dict[edge]['stop_coord'][0]]
-			yvec = [trans_dict[edge]['start_coord'][1], trans_dict[edge]['stop_coord'][1]]
-			if trans_dict[edge]['trans_edge'] == 1:
-				plt.plot(xvec,yvec,'r-')
-			else:
-				plt.plot(xvec,yvec,'g.')
-		plt.axis('equal')
-		plt.title(str(i))
-		plt.show()
+			clone_graph[edge[0]][edge[1]]['weight'] = np.mean(weights)
 
 		cluster_graphs.append(clone_graph)
-	ipdb.set_trace()
 	return cluster_graphs
