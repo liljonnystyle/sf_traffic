@@ -49,7 +49,7 @@ def load_fresh():
 	print str(len(uber_df['ride'].unique())) + ' rides'
 	print 'loaded uber_df'
 	pickle.dump(uber_df,open('../pickles/uber_df.pkl','wb'))
-
+	
 	print 'loading street df from json...'
 	street_df = load_streets(n=1)
 	pickle.dump(street_df,open('../pickles/street_df.pkl','wb'))
@@ -406,12 +406,13 @@ OUTPUT: length and unit vector
 '''
 def edge_eval(start, stop, to_miles=0):
 	if to_miles == 1:
-		start[0] *= 2 * math.pi * rad_x / 360
-		start[1] *= 2 * math.pi * radius / 360
-		stop[0] *= 2 * math.pi * rad_x / 360
-		stop[1] *= 2 * math.pi * radius / 360
-	length = ((start[0] - stop[0])**2 + (start[1] - stop[1])**2)**0.5
-	unit_vec = np.array([(stop[0] - start[0])/length, (stop[1] - start[1])/length])
+		newstart = (start[0] * 2 * math.pi * rad_x / 360, start[1] * 2 * math.pi * radius / 360)
+		newstop = (stop[0] * 2 * math.pi * rad_x / 360, stop[1] * 2 * math.pi * radius / 360)
+	else:
+		newstart = start
+		newstop = stop
+	length = ((newstart[0] - newstop[0])**2 + (newstart[1] - newstop[1])**2)**0.5
+	unit_vec = np.array([(newstop[0] - newstart[0])/length, (newstop[1] - newstart[1])/length])
 	return length, unit_vec
 
 '''

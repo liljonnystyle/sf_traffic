@@ -14,9 +14,9 @@ def main():
 	import cluster
 	import cluster_graphs
 
-	data_from_pickle = 0
+	data_from_pickle = 1
 	projection_from_pickle = 1
-	clusters_from_pickle = 0
+	clusters_from_pickle = 1
 
 	if data_from_pickle:
 		uber_df, street_df, street_graph, node_coord_dict, coord_node_dict, \
@@ -47,6 +47,7 @@ def main():
 
 	cluster_graphs = cluster_graphs.make_cluster_graphs(centroids, 
 		transition_graph, uber_df, edge_dict, edge_trans_dict)
+	pickle.dump(cluster_graphs, open('../pickles/cluster_graphs.pkl','wb'))
 
 if __name__ == '__main__':
 	main()
