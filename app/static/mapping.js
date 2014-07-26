@@ -29,7 +29,7 @@ var JRoutingMapper = {
     var coords = [];
 
     for (var i = 0; i < points.length; i += 1) {
-      coords.push(new google.maps.LatLng(points[i][0] + (line_no*0.00005) - 0.0001, points[i][1] + (line_no*0.00005) - 0.0001));
+      coords.push(new google.maps.LatLng(points[i][0] + (line_no*0.00005) - 0.000025, points[i][1] + (line_no*0.00005) - 0.000025));
     }
     
     var colors = ['blue', 'red', 'green', 'black'];
