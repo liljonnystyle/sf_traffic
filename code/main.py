@@ -8,24 +8,18 @@ import cluster_graphs
 import ipdb
 
 def main():
-	import load_data
-	import pickle
-	import project
-	import cluster
-	import cluster_graphs
-
-	data_from_pickle = 1
+	data_from_pickle = 0
 	projection_from_pickle = 1
 	clusters_from_pickle = 1
 
 	if data_from_pickle:
 		uber_df, street_df, street_graph, node_coord_dict, coord_node_dict, \
 			edge_dict, coord_lookup, transition_graph, trans_edge_dict, \
-			edge_trans_dict = load_data.from_pickle()
+			edge_trans_dict, trans_dict = load_data.from_pickle()
 	else:
 		uber_df, street_df, street_graph, node_coord_dict, coord_node_dict, \
 			edge_dict, coord_lookup, transition_graph, trans_edge_dict, \
-			edge_trans_dict = load_data.load_fresh()
+			edge_trans_dict, trans_dict = load_data.load_fresh()
 
 	''' apply Kalman filter first pass here, fix large errors '''
 
@@ -40,14 +34,18 @@ def main():
 
 	''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
 
+	# TODO: put this into load_data above
+	edge_class_dict = {edge:val[1] for edge,val in edge_dict.iteritems()}
+	uber_df['class'] = uber_df['edge'].map(edge_class_dict)
+
 	if clusters_from_pickle:
 		uber_df, centroids = cluster.from_pickle()
 	else:
 		uber_df, centroids = cluster.cluster(uber_df)
 
-	cluster_graphs = cluster_graphs.make_cluster_graphs(centroids, 
-		transition_graph, uber_df, edge_dict, edge_trans_dict)
-	pickle.dump(cluster_graphs, open('../pickles/cluster_graphs.pkl','wb'))
+	cgraphs = cluster_graphs.make_cluster_graphs(centroids, 
+		transition_graph, uber_df, edge_dict, trans_dict)
+	pickle.dump(cgraphs, open('../pickles/cgraphs.pkl','wb'))
 
 if __name__ == '__main__':
 	main()

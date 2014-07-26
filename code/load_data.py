@@ -69,13 +69,14 @@ def load_fresh():
 	print 'assembled street graph'
 
 	print 'assembling transition graph...'
-	transition_graph, trans_edge_dict, edge_trans_dict, transnode_node_dict = create_transition_graph(street_graph, node_coord_dict, edge_dict)
+	transition_graph, trans_edge_dict, edge_trans_dict, transnode_node_dict, trans_dict = create_transition_graph(street_graph, node_coord_dict, edge_dict)
 	pickle.dump(transition_graph,open('../pickles/transition_graph.pkl','wb'))
 	pickle.dump(trans_edge_dict,open('../pickles/trans_edge_dict.pkl','wb'))
 	pickle.dump(edge_trans_dict,open('../pickles/edge_trans_dict.pkl','wb'))
+	pickle.dump(trans_dict,open('../pickles/trans_dict.pkl','wb'))
 	print 'assembled transition graph'
 
-	return uber_df, street_df, street_graph, node_coord_dict, coord_node_dict, edge_dict, coord_lookup, transition_graph, trans_edge_dict, edge_trans_dict
+	return uber_df, street_df, street_graph, node_coord_dict, coord_node_dict, edge_dict, coord_lookup, transition_graph, trans_edge_dict, edge_trans_dict, trans_dict
 
 '''
 read uber_df from pickle
@@ -109,9 +110,10 @@ def from_pickle():
 	transition_graph = pickle.load(open('../pickles/transition_graph.pkl','rb'))
 	trans_edge_dict = pickle.load(open('../pickles/trans_edge_dict.pkl','rb'))
 	edge_trans_dict = pickle.load(open('../pickles/edge_trans_dict.pkl','rb'))
+	trans_dict = pickle.load(open('../pickles/trans_dict.pkl','rb'))
 	print 'read transition graph'
 
-	return uber_df, street_df, street_graph, node_coord_dict, coord_node_dict, edge_dict, coord_lookup, transition_graph, trans_edge_dict, edge_trans_dict
+	return uber_df, street_df, street_graph, node_coord_dict, coord_node_dict, edge_dict, coord_lookup, transition_graph, trans_edge_dict, edge_trans_dict, trans_dict
 
 def dparser(datestring):
 	return datetime.datetime.strptime(datestring,'%Y-%m-%dT%H:%M:%S+00:00')
@@ -422,8 +424,8 @@ OUTPUT: new vector shortened to 1%-90% of original vector
 def shorten_edge(coord, length, unit_vec):
 	# could actually just compute full vector here...
 	# but length and unit_vec give more flexibility for later changes
-	start_coord = (coord[0]+unit_vec[0]*length*0.01, coord[1]+unit_vec[1]*length*0.01)
-	stop_coord = (coord[0]+unit_vec[0]*length*0.9, coord[1]+unit_vec[1]*length*0.9)
+	start_coord = (coord[0]+unit_vec[0]*length*0.1, coord[1]+unit_vec[1]*length*0.1)
+	stop_coord = (coord[0]+unit_vec[0]*length*0.75, coord[1]+unit_vec[1]*length*0.75)
 	return start_coord, stop_coord
 
 '''
@@ -438,6 +440,7 @@ def create_transition_graph(G, node_dict, edge_dict):
 	edge_trans_dict = {}
 	node_count = 0
 	transnode_node_dict = {}
+	trans_dict = {}
 	for edge in G.edges_iter():
 		new_edge_coords = shorten_edge(node_dict[edge[0]], edge_dict[edge][2], edge_dict[edge][3])
 		wt = G[edge[0]][edge[1]]['weight']
@@ -446,6 +449,9 @@ def create_transition_graph(G, node_dict, edge_dict):
 		node_count += 2
 		trans_edge_dict[new_edge] = edge
 		edge_trans_dict[edge] = new_edge
+		trans_dict[new_edge] = {'start_coord': new_edge_coords[0], 
+								'stop_coord': new_edge_coords[1],
+								'trans_edge': 0}
 		transnode_node_dict[new_edge[0]] = edge[0]
 		transnode_node_dict[new_edge[1]] = edge[1]
 		if edge[0] in start_dict:
@@ -458,10 +464,14 @@ def create_transition_graph(G, node_dict, edge_dict):
 		if oldstop in start_dict:
 			for newstart in start_dict[oldstop]:
 				newG.add_path([newstop, newstart], weight=1000)
+				new_edge = (newstop, newstart)
+				trans_dict[new_edge] = {'start_coord': node_dict[oldstop],
+										'stop_coord': node_dict[transnode_node_dict[newstart]],
+										'trans_edge': 1}
 
 	# for edge in newG.edges():
 	# 	if edge not in trans_edge_dict:
 	# 		oldedge1 = (transnode_node_dict[edge[0]], transnode_node_dict[edge[0]])
 	# 		oldedge2 = (transnode_node_dict[edge[1]], transnode_node_dict[edge[1]])
 
-	return newG, trans_edge_dict, edge_trans_dict, transnode_node_dict
+	return newG, trans_edge_dict, edge_trans_dict, transnode_node_dict, trans_dict

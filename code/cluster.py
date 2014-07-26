@@ -17,10 +17,10 @@ radius = 3963.1676
 rad_x = 3963.1676*np.cos(37.7833*math.pi/180)
 
 def cluster(uber_df):
-	#uber_df = filter_badrides(uber_df, pop=0)
+	uber_df = filter_badrides(uber_df, pop=0)
 	#compute speed and accel, filter out bad rides
-	#pickle.dump(uber_df, open('../pickles/uber_df_filtered.pkl','wb'))
-	uber_df = pickle.load(open('../pickles/uber_df_filtered.pkl'))
+	pickle.dump(uber_df, open('../pickles/uber_df_filtered.pkl','wb'))
+	# uber_df = pickle.load(open('../pickles/uber_df_filtered.pkl'))
 
 	uber_df = flag_rushhour(uber_df)
 	tmp_dict = uber_df.groupby('ride')['rush_hour'].aggregate(lambda x: Counter(x).most_common(1)[0][0]).to_dict()
@@ -136,15 +136,15 @@ def flag_rushhour(uber_df):
 	return reindexed_df.reset_index()
 
 def get_features(df):
-	X = pd.DataFrame(df[df['speed']>0].groupby('ride')['speed'].max())
+	X = pd.DataFrame(df[(df['speed']>0) & (df['class'] != 1)].groupby('ride')['speed'].max())
 	X.columns = ['max_speed']
-	X['avg_speed'] = df[df['speed']>0].groupby('ride')['speed'].mean()
+	X['avg_speed'] = df[(df['speed']>0) & (df['class'] != 1)].groupby('ride')['speed'].mean()
 	# X['med_speed'] = df[df['speed']>0].groupby('ride')['speed'].median()
-	X['max_accel'] = df[df['accel']>=0].groupby('ride')['accel'].max()
-	X['avg_accel'] = df[df['accel']>=0].groupby('ride')['accel'].mean()
+	X['max_accel'] = df[(df['accel']>=0) & (df['class'] != 1)].groupby('ride')['accel'].max()
+	X['avg_accel'] = df[(df['accel']>=0) & (df['class'] != 1)].groupby('ride')['accel'].mean()
 	# X['med_accel'] = df[df['accel']>=0].groupby('ride')['accel'].median()
-	X['max_decel'] = df[df['accel']<=0].groupby('ride')['accel'].min()
-	X['avg_decel'] = df[df['accel']<=0].groupby('ride')['accel'].mean()
+	X['max_decel'] = df[(df['accel']<=0) & (df['class'] != 1)].groupby('ride')['accel'].min()
+	X['avg_decel'] = df[(df['accel']<=0) & (df['class'] != 1)].groupby('ride')['accel'].mean()
 	# X['med_decel'] = df[df['accel']<=0].groupby('ride')['accel'].median()
 
 	'''
@@ -156,7 +156,9 @@ def get_features(df):
 			ipdb.set_trace()
 		return 4.0*sum(nz)/len(np.where(np.diff(nz) == 1)[0]) #mean free path in seconds
 	
-	X['mfp'] = df.groupby('ride')['speed'].apply(mfp)
+	X['mfp'] = df[df['class'] != 1].groupby('ride')['speed'].apply(mfp)
+
+	X = X.fillna(X.mean())
 	return X
 
 '''
