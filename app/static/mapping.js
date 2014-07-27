@@ -17,12 +17,27 @@ var JRoutingMapper = {
         // Update the line and symbol
         JRoutingMapper.map.setCenter({lat: data.lat, lng: data.lng})
         JRoutingMapper.map.setZoom(14)
+
+        // JRoutingMapper.calcGoogleRoute(source,destination)
         for (var i = 0; i < data.etas.length; i += 1) {
           JRoutingMapper.lines.push(JRoutingMapper.drawPolyline(data.points[i], data.etas[i], data.max_eta, i));
         };
         JRoutingMapper.writeOutput(data.etas);
       }
     })
+  },
+
+  calcGoogleRoute: function(start,end) {
+    var request = {
+        origin:start,
+        destination:end,
+        travelMode: google.maps.TravelMode.DRIVING
+    };
+    JRoutingMapper.directionsService.route(request, function(response, status) {
+      if (status == google.maps.DirectionsStatus.OK) {
+        // directionsDisplay.setDirections(response);
+      }
+    });
   },
 
   drawPolyline: function (points, eta, max_eta, line_no) {
@@ -95,6 +110,7 @@ var JRoutingMapper = {
     JRoutingMapper.map = new google.maps.Map(document.getElementById('map-canvas'),
         mapOptions);
     JRoutingMapper.lines = []
+    JRoutingMapper.directionsService = new google.maps.DirectionsService();
 
     // When user has submitted source and destination
     $('#nav-box').find('form').on('submit', function (e) {

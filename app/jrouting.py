@@ -49,11 +49,13 @@ def find_nearest_street(x, y, edges, node_dict, edge_dict):
 		return min_edge, min_frac, 0
 
 def get_gmaps_dirs(source,destination):
-	apikeys = ['AIzaSyBMTLIl73fU5XRJLvug1T_yVUhpJQQoNCw']
+	apikeys = ['AIzaSyBbKW7pUx7aE6PrBkBDhl3KYPyYufIzh0E']
+	# ['AIzaSyBMTLIl73fU5XRJLvug1T_yVUhpJQQoNCw']
 
 	keycount = 0
 	print 'hi'
-	directions = GoogleMaps(apikeys[keycount]).directions(source,destination)
+	gmaps = GoogleMaps(apikeys[keycount])
+	directions = gmaps.directions(source,destination)
 
 	print 'hello'
 	eta = directions['Directions']['Duration']['seconds']
@@ -156,12 +158,12 @@ def routing():
 		ret['points'].append(coords)
 		ret['etas'].append(format(eta/60,'.2f'))
 		etas.append(eta)
-	eta, coords = get_gmaps_dirs(source,dest)
-	print eta
-	print coords
-	etas.append(eta)
-	ret['points'].append(coords)
-	ret['etas'].append(format(eta/60,'.2f'))
+	# eta, coords = get_gmaps_dirs(source,dest)
+	# print eta
+	# print coords
+	# etas.append(eta)
+	# ret['points'].append(coords)
+	# ret['etas'].append(format(eta/60,'.2f'))
 	ret['max_eta'] = format(max(etas)/60,'.2f')
 	return jsonify(ret)
 
