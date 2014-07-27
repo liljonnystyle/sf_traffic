@@ -52,13 +52,16 @@ def get_gmaps_dirs(source,destination):
 	apikeys = ['AIzaSyBMTLIl73fU5XRJLvug1T_yVUhpJQQoNCw']
 
 	keycount = 0
-	# try:
+	print 'hi'
 	directions = GoogleMaps(apikeys[keycount]).directions(source,destination)
-	# except:
 
-	print 'Google Maps Directions:\n'
+	print 'hello'
+	eta = directions['Directions']['Duration']['seconds']
+	coords = []
 	for step in directions['Directions']['Routes'][0]['Steps']:
-		print step['descriptionHtml']
+		coord = tuple(step['Point']['coordinates'][:2])
+		coords.append(coord)
+	return eta, coords
 
 def get_edge(address, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict):
 	apikeys = ['AIzaSyDFKC9RzHpgfCdnslTL0QXNHO_JpWcYXuQ',
@@ -100,11 +103,15 @@ def routing():
 	source, dest, time = request.args['source'], request.args['destination'], request.args['time']
 
 	if time == 'morning':
-		inds = [0, 1]
-	elif time == 'afternoon':
 		inds = [2, 3]
-	else:
+	elif time == 'afternoon':
 		inds = [4, 5]
+	else:
+		inds = [0, 1]
+	# if time == 'rush':
+	# 	inds = [2, 3]
+	# else:
+	# 	inds = [0, 1]
 
 	sc_transedge, sc_edge, sc_frac = get_edge(source, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
 	ds_transedge, ds_edge, ds_frac = get_edge(dest, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
@@ -123,12 +130,15 @@ def routing():
 		ds_node = ds_transedge[0]
 		ds_lng, ds_lat = node_coord_dict[ds_edge[0]]
 
+	# print sc_node, ds_node
+
 	ret = {'points': [], 'etas': []}
 	ret['lat'] = (sc_lat+ds_lat)/2.0
 	ret['lng'] = (sc_lng+ds_lng)/2.0
+	etas = []
 	for i in inds:
 		transition_graph = cluster_graphs[i]
-		path = nx.astar_path(transition_graph,sc_node,ds_node)
+		path = nx.dijkstra_path(transition_graph,sc_node,ds_node)
 		eta = 0
 		coords = []
 		for j in xrange(len(path)-1):
@@ -145,7 +155,14 @@ def routing():
 			eta += transition_graph[path[j]][path[j+1]]['weight']
 		ret['points'].append(coords)
 		ret['etas'].append(format(eta/60,'.2f'))
-	ret['max_eta'] = max(ret['etas'])
+		etas.append(eta)
+	eta, coords = get_gmaps_dirs(source,dest)
+	print eta
+	print coords
+	etas.append(eta)
+	ret['points'].append(coords)
+	ret['etas'].append(format(eta/60,'.2f'))
+	ret['max_eta'] = format(max(etas)/60,'.2f')
 	return jsonify(ret)
 
 @app.route('/', methods = ['GET'])
@@ -155,7 +172,7 @@ def start_page():
 # 	get_gmaps_dirs(source,destination)
 
 if __name__ == '__main__':
-	cluster_graphs = pickle.load(open('../pickles/cluster_graphs.pkl'))
+	cluster_graphs = pickle.load(open('../pickles/cgraphs.pkl'))
 	trans_edge_dict = pickle.load(open('../pickles/trans_edge_dict.pkl'))
 	edge_trans_dict = pickle.load(open('../pickles/edge_trans_dict.pkl'))
 	coord_lookup = pickle.load(open('../pickles/coord_lookup.pkl'))
