@@ -27,8 +27,10 @@ def cluster(uber_df):
 	uber_df['rush_hour'] = uber_df['ride'].map(tmp_dict)
 
 	rush_hour_flags = ['none', 'morning', 'afternoon']
+	# rush_hour_flags = ['none', 'yes']
 	uber_df['cluster'] = None
 
+	ride_cluster_dict = {}
 	for i,flag in enumerate(rush_hour_flags):
 		flag_df = uber_df[uber_df['rush_hour'] == flag]
 		X = get_features(flag_df)
@@ -37,17 +39,16 @@ def cluster(uber_df):
 		clusters, centers = get_clusters(X_scaled, n=2)
 		centers = scaler.inverse_transform(centers)
 		if centers[0,0] > centers[1,0]:
-			fast_centers = centers[0,:]
-			centers[0,:] = centers[1,:]
-			centers[1,:] = fast_centers
+			centers = centers[::-1,:]
 			clusters = np.where(clusters == 0, 1, 0)
 		clusters += i*2
 		if i == 0:
 			centroids = centers
 		else:
 			centroids = np.vstack((centroids,centers))
-		ride_cluster_dict = dict(zip(X.index,clusters))
-		uber_df.ix[flag_df.index,'cluster'] = uber_df.ix[flag_df.index,'ride'].apply(lambda x: ride_cluster_dict[x])
+		# ipdb.set_trace()
+		ride_cluster_dict.update(dict(zip(X.index,clusters)))
+	uber_df['cluster'] = uber_df['ride'].map(ride_cluster_dict)
 
 	pickle.dump(uber_df, open('../pickles/uber_df_clustered.pkl','wb'))
 	pickle.dump(centroids, open('../pickles/centroids.pkl','wb'))
@@ -125,26 +126,30 @@ def filter_badrides(uber_df, pop=1):
 create rush hour flag column in Uber DataFrame
 '''
 def flag_rushhour(uber_df):
+	print len(uber_df['ride'].unique())
 	reindexed_df = uber_df.set_index('datetime')
 	reindexed_df['rush_hour'] = 'none'
 
-	morning_df = reindexed_df.ix['2007-01-02':'2007-01-07'].between_time('6:00','10:00')
+	morning_df = reindexed_df.ix['2007-01-01':'2007-01-06'].between_time('5:00','11:00')
 	reindexed_df.ix[morning_df.index, 'rush_hour'] = 'morning'
-	afternoon_df = reindexed_df.ix['2007-01-02':'2007-01-07'].between_time('15:00','19:00')
+	# reindexed_df.ix[morning_df.index, 'rush_hour'] = 'yes'
+	afternoon_df = reindexed_df.ix['2007-01-01':'2007-01-06'].between_time('15:00','20:00')
 	reindexed_df.ix[afternoon_df.index, 'rush_hour'] = 'afternoon'
+	# reindexed_df.ix[afternoon_df.index, 'rush_hour'] = 'yes'
 
 	return reindexed_df.reset_index()
 
 def get_features(df):
-	X = pd.DataFrame(df[(df['speed']>0) & (df['class'] != 1)].groupby('ride')['speed'].max())
-	X.columns = ['max_speed']
-	X['avg_speed'] = df[(df['speed']>0) & (df['class'] != 1)].groupby('ride')['speed'].mean()
+	classes = {0,2,3,4,5}
+	X = pd.DataFrame(df[(df['speed']>0) & (df['class'].isin(classes))].groupby('ride')['speed'].mean())
+	X.columns = ['avg_speed']
+	# X['avg_speed'] = df[(df['speed']>0) & (df['class'] != 1)].groupby('ride')['speed'].mean()
 	# X['med_speed'] = df[df['speed']>0].groupby('ride')['speed'].median()
-	X['max_accel'] = df[(df['accel']>=0) & (df['class'] != 1)].groupby('ride')['accel'].max()
-	X['avg_accel'] = df[(df['accel']>=0) & (df['class'] != 1)].groupby('ride')['accel'].mean()
+	# X['max_accel'] = df[(df['accel']>=0) & (df['class'].isin(classes))].groupby('ride')['accel'].max()
+	X['avg_accel'] = df[(df['accel']>=0) & (df['class'].isin(classes))].groupby('ride')['accel'].mean()
 	# X['med_accel'] = df[df['accel']>=0].groupby('ride')['accel'].median()
-	X['max_decel'] = df[(df['accel']<=0) & (df['class'] != 1)].groupby('ride')['accel'].min()
-	X['avg_decel'] = df[(df['accel']<=0) & (df['class'] != 1)].groupby('ride')['accel'].mean()
+	# X['max_decel'] = df[(df['accel']<=0) & (df['class'].isin(classes))].groupby('ride')['accel'].min()
+	X['avg_decel'] = df[(df['accel']<=0) & (df['class'].isin(classes))].groupby('ride')['accel'].mean()
 	# X['med_decel'] = df[df['accel']<=0].groupby('ride')['accel'].median()
 
 	'''
@@ -156,7 +161,7 @@ def get_features(df):
 			ipdb.set_trace()
 		return 4.0*sum(nz)/len(np.where(np.diff(nz) == 1)[0]) #mean free path in seconds
 	
-	X['mfp'] = df[df['class'] != 1].groupby('ride')['speed'].apply(mfp)
+	X['mfp'] = df[df['class'].isin(classes)].groupby('ride')['speed'].apply(mfp)
 
 	X = X.fillna(X.mean())
 	return X
@@ -167,7 +172,7 @@ compute kmeans clusters
 def get_clusters(X, n=4):
 	# distxy = squareform(pdist(X_scaled, metric='euclidean'))
 	# linkage(distxy, method='complete')
-	model = KMeans(n)#,n_jobs=-1)
+	model = KMeans(n,n_jobs=-1)
 	model.fit(X)
 
 	return model.predict(X), model.cluster_centers_

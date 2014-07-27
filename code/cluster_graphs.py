@@ -55,7 +55,7 @@ def get_edge_weights(data, args):
 			i += 1
 	return times_dict
 
-def make_cluster_graphs(centroids, transition_graph, uber_df, edge_dict, trans_dict):
+def make_cluster_graphs(centroids, transition_graph, uber_df, edge_dict):
 	print 'making cluster graphs'
 	nclusters = centroids.shape[0]
 	cluster_graphs = []
@@ -77,4 +77,25 @@ def make_cluster_graphs(centroids, transition_graph, uber_df, edge_dict, trans_d
 			clone_graph[edge[0]][edge[1]]['weight'] = np.mean(weights)
 
 		cluster_graphs.append(clone_graph)
+		print 'made ' + str(i) + ' graphs'
 	return cluster_graphs
+
+def preadjust_transweights(uber_df, edge_dict, transition_graph):
+	print 'pre-adjusting transition weights using all drivers...'
+	df = uber_df[['ride','speed','edge','consecutive_edges','trans_edge']]
+	grouped = df.groupby('ride')
+	times_group_dict = grouped[['edge','consecutive_edges','speed']].apply(get_edge_weights,
+			args=(edge_dict)).to_dict()
+	#TODO: combine this apply-fn with make_cluster_graphs to reduce repeated computations
+	edge_weights_dict = {}
+	for ride, times_dict in times_group_dict.iteritems():
+		for edge, times in times_dict.iteritems():
+			if edge in edge_weights_dict:
+				edge_weights_dict[edge].extend(times)
+			else:
+				edge_weights_dict[edge] = times
+
+	for edge, weights in edge_weights_dict.iteritems():
+		transition_graph[edge[0]][edge[1]]['weight'] = np.mean(weights)
+	print 'adjusted transition weights'
+	return transition_graph

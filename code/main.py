@@ -34,17 +34,15 @@ def main():
 
 	''' apply Kalman filter second pass here? fix small errors and re-project onto edges? '''
 
-	# TODO: put this into load_data above
-	edge_class_dict = {edge:val[1] for edge,val in edge_dict.iteritems()}
-	uber_df['class'] = uber_df['edge'].map(edge_class_dict)
-
 	if clusters_from_pickle:
 		uber_df, centroids = cluster.from_pickle()
 	else:
 		uber_df, centroids = cluster.cluster(uber_df)
 
+	transition_graph = cluster_graphs.preadjust_transweights(uber_df, edge_dict, transition_graph)
+	pickle.dump(transition_graph, open('../pickles/transition_graph_update.pkl','wb'))
 	cgraphs = cluster_graphs.make_cluster_graphs(centroids, 
-		transition_graph, uber_df, edge_dict, trans_dict)
+		transition_graph, uber_df, edge_dict)
 	pickle.dump(cgraphs, open('../pickles/cgraphs.pkl','wb'))
 
 if __name__ == '__main__':

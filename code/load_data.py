@@ -42,13 +42,13 @@ def load_fresh():
 	uber_df = uber_df.drop(['ride'],axis=1).reset_index().drop(['level_1'],axis=1)
 	uber_df = uber_df.dropna()
 	
+	print len(uber_df['ride'].unique())
 	uber_df = cluster.filter_badrides(uber_df,pop=1)
+	print len(uber_df['ride'].unique())
 	# compute speed and accel, filter out bad rides, pop out speed and accel
 
-	print str(len(uber_df)) + ' timestamps'
-	print str(len(uber_df['ride'].unique())) + ' rides'
-	print 'loaded uber_df'
 	pickle.dump(uber_df,open('../pickles/uber_df.pkl','wb'))
+	print 'loaded uber_df'
 	
 	print 'loading street df from json...'
 	street_df = load_streets(n=1)
@@ -88,7 +88,6 @@ def from_pickle():
 	print 'reading uber_df from pickle...'
 	uber_df = pickle.load(open('../pickles/uber_df.pkl'))
 	print 'read uber_df'
-	uber_df = uber_df.groupby('ride').apply(fill_timeseries)
 
 	print 'reading street df from pickle...'
 	street_df = pickle.load(open('../pickles/street_df.pkl','rb'))

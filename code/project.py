@@ -303,6 +303,9 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 
 	uber_df = uber_df.drop(['ride'],axis=1).reset_index().drop(['level_1'],axis=1)
 	
+	edge_class_dict = {edge:val[1] for edge,val in edge_dict.iteritems()}
+	uber_df['class'] = uber_df['edge'].map(edge_class_dict)
+
 	return uber_df
 
 '''
