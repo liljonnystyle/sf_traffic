@@ -18,26 +18,13 @@ var JRoutingMapper = {
         JRoutingMapper.map.setCenter({lat: data.lat, lng: data.lng})
         JRoutingMapper.map.setZoom(14)
 
-        // JRoutingMapper.calcGoogleRoute(source,destination)
+        console.log(data)
         for (var i = 0; i < data.etas.length; i += 1) {
           JRoutingMapper.lines.push(JRoutingMapper.drawPolyline(data.points[i], data.etas[i], data.max_eta, i));
         };
         JRoutingMapper.writeOutput(data.etas);
       }
     })
-  },
-
-  calcGoogleRoute: function(start,end) {
-    var request = {
-        origin:start,
-        destination:end,
-        travelMode: google.maps.TravelMode.DRIVING
-    };
-    JRoutingMapper.directionsService.route(request, function(response, status) {
-      if (status == google.maps.DirectionsStatus.OK) {
-        // directionsDisplay.setDirections(response);
-      }
-    });
   },
 
   drawPolyline: function (points, eta, max_eta, line_no) {
@@ -47,7 +34,7 @@ var JRoutingMapper = {
       coords.push(new google.maps.LatLng(points[i][0] + (line_no*0.00005) - 0.000025, points[i][1] + (line_no*0.00005) - 0.000025));
     }
     
-    var colors = ['green', 'red', 'blue'];
+    var colors = ['red', 'green', 'blue'];
     
     var symbol = {
       icon: {
@@ -88,7 +75,7 @@ var JRoutingMapper = {
   },
 
   writeOutput: function (etas) {
-    var colors = ['green', 'red', 'blue'];
+    var colors = ['red', 'green', 'blue'];
     var clusters = ['Normal Drivers', 'Aggressive Drivers', 'Google Maps Route']
     var out = ''
     for (var i = 0; i < etas.length; i += 1) {

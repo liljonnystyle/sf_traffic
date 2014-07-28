@@ -446,6 +446,7 @@ def create_transition_graph(G, node_dict, edge_dict):
 		new_edge_coords = shorten_edge(node_dict[edge[0]], edge_dict[edge][2], edge_dict[edge][3])
 		wt = G[edge[0]][edge[1]]['weight']
 		newG.add_path([node_count, node_count+1], weight=wt)
+		newG[node_count][node_count+1]['std'] = 0.0
 		new_edge = (node_count, node_count+1)
 		node_count += 2
 		trans_edge_dict[new_edge] = edge
@@ -465,6 +466,7 @@ def create_transition_graph(G, node_dict, edge_dict):
 		if oldstop in start_dict:
 			for newstart in start_dict[oldstop]:
 				newG.add_path([newstop, newstart], weight=1000)
+				newG[newstop][newstart]['std'] = 0.0
 				new_edge = (newstop, newstart)
 				trans_dict[new_edge] = {'coord': node_dict[oldstop],
 										'trans_edge': 1}

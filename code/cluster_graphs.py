@@ -75,7 +75,7 @@ def make_cluster_graphs(centroids, transition_graph, uber_df, edge_dict):
 
 		for edge, weights in edge_weights_dict.iteritems():
 			clone_graph[edge[0]][edge[1]]['weight'] = np.mean(weights)
-
+			clone_graph[edge[0]][edge[1]]['std'] = np.std(weights)
 		cluster_graphs.append(clone_graph)
 		print 'made ' + str(i) + ' graphs'
 	return cluster_graphs
@@ -97,5 +97,6 @@ def preadjust_transweights(uber_df, edge_dict, transition_graph):
 
 	for edge, weights in edge_weights_dict.iteritems():
 		transition_graph[edge[0]][edge[1]]['weight'] = np.mean(weights)
+		transition_graph[edge[0]][edge[1]]['std'] = np.std(weights)
 	print 'adjusted transition weights'
 	return transition_graph

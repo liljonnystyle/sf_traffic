@@ -8,6 +8,8 @@ from flask import Flask, request, session, g, redirect, url_for, abort, \
      render_template, flash, jsonify
 import requests
 import random
+import json
+import requests
 
 app = Flask(__name__)
 
@@ -52,17 +54,27 @@ def get_gmaps_dirs(source,destination):
 	apikeys = ['AIzaSyBbKW7pUx7aE6PrBkBDhl3KYPyYufIzh0E']
 	# ['AIzaSyBMTLIl73fU5XRJLvug1T_yVUhpJQQoNCw']
 
-	keycount = 0
-	print 'hi'
-	gmaps = GoogleMaps(apikeys[keycount])
-	directions = gmaps.directions(source,destination)
+	source = source.replace(' ','+')
+	source = source.replace(',','%2C')
+	destination = destination.replace(' ','+')
+	destination = destination.replace(',','%2C')
 
-	print 'hello'
-	eta = directions['Directions']['Duration']['seconds']
+	keycount = 0
+	dir_url = 'https://maps.googleapis.com/maps/api/directions/json?'
+	dir_url += 'origin=' + source + '&'
+	dir_url += 'destination=' + destination + '&'
+	dir_url += 'key=' + apikeys[keycount]
+	r = requests.get(dir_url)
+	directions = r.json()
+
 	coords = []
-	for step in directions['Directions']['Routes'][0]['Steps']:
-		coord = tuple(step['Point']['coordinates'][:2])
+	eta = 0.0
+	for step in directions['routes'][0]['legs'][0]['steps']:
+		eta += step['duration']['value']
+		coord = (step['start_location']['lat'], step['start_location']['lng'])
 		coords.append(coord)
+	coord = (step['end_location']['lat'], step['end_location']['lng'])
+	coords.append(coord)
 	return eta, coords
 
 def get_edge(address, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict):
@@ -158,12 +170,12 @@ def routing():
 		ret['points'].append(coords)
 		ret['etas'].append(format(eta/60,'.2f'))
 		etas.append(eta)
-	# eta, coords = get_gmaps_dirs(source,dest)
+	eta, coords = get_gmaps_dirs(source,dest)
 	# print eta
 	# print coords
-	# etas.append(eta)
-	# ret['points'].append(coords)
-	# ret['etas'].append(format(eta/60,'.2f'))
+	etas.append(eta)
+	ret['points'].append(coords)
+	ret['etas'].append(format(eta/60,'.2f'))
 	ret['max_eta'] = format(max(etas)/60,'.2f')
 	return jsonify(ret)
 
@@ -181,4 +193,5 @@ if __name__ == '__main__':
 	edge_dict = pickle.load(open('../pickles/edge_dict.pkl'))
 	node_coord_dict = pickle.load(open('../pickles/node_coord_dict.pkl'))
 
+	print 'ready'
 	app.run(host = '0.0.0.0', debug = True)
