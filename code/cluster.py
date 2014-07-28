@@ -4,6 +4,11 @@ import pickle
 import math
 import ipdb
 
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+import matplotlib
+# import seaborn
+
 from collections import Counter
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import pdist, squareform
@@ -16,11 +21,16 @@ from sklearn.preprocessing import StandardScaler
 radius = 3963.1676
 rad_x = 3963.1676*np.cos(37.7833*math.pi/180)
 
+font = {'family' : 'sans-serif',
+        'size'   : 25}
+matplotlib.rc('font', **font)
+
 def cluster(uber_df):
-	uber_df = filter_badrides(uber_df, pop=0)
+	plot = 1
+	# uber_df = filter_badrides(uber_df, pop=0)
 	#compute speed and accel, filter out bad rides
-	pickle.dump(uber_df, open('../pickles/uber_df_filtered.pkl','wb'))
-	# uber_df = pickle.load(open('../pickles/uber_df_filtered.pkl'))
+	# pickle.dump(uber_df, open('../pickles/uber_df_filtered.pkl','wb'))
+	uber_df = pickle.load(open('../pickles/uber_df_filtered.pkl'))
 
 	uber_df = flag_rushhour(uber_df)
 	tmp_dict = uber_df.groupby('ride')['rush_hour'].aggregate(lambda x: Counter(x).most_common(1)[0][0]).to_dict()
@@ -41,6 +51,43 @@ def cluster(uber_df):
 		if centers[0,0] > centers[1,0]:
 			centers = centers[::-1,:]
 			clusters = np.where(clusters == 0, 1, 0)
+
+		if plot == 1:
+			X = scaler.inverse_transform(X)
+			X = pd.DataFrame(X)
+			X.columns = ['avg_speed','avg_accel','avg_decel','mfp']
+			X['cluster'] = clusters
+			fig = plt.figure(figsize=(20,20))
+			ax = fig.add_axes([.2,.2,.9,.9], projection='3d') 
+			# ax = fig.add_subplot(111, projection='3d')
+			# ax.xaxis.set_scale('log')
+			# ax.yaxis.set_scale('log')
+			# ax.zaxis.set_scale('log')
+			c_dict = {0: 'r', 1: 'g'}
+			# l_dict = {0: 'Normal Drivers', 1: 'Aggressive Drivers'}
+			for j in xrange(2):
+				ax.scatter(X[X['cluster'] == j]['avg_speed'],
+						X[X['cluster'] == j]['avg_accel'],
+						-X[X['cluster'] == j]['avg_decel'],
+						c=c_dict[j],alpha=0.5,linewidth=0)#,label=l_dict[j])
+			ax.set_xlabel('Average Speed (log)',size='large')
+			ax.set_ylabel('Average Acceleration (log)',size='large')
+			ax.set_zlabel('Average Deceleration (log)',size='large')
+			# ax.view_init(elev=30, azim=325)
+			ax.set_xlim(1E-2,4E1)
+			ax.set_ylim(1E-2,1E0)
+			ax.set_zlim(1E-2,1E0)
+			ax.set_xticks([])
+			ax.set_yticks([])
+			ax.set_zticks([])
+			scatter1_proxy = matplotlib.lines.Line2D([0],[0], linestyle="none", color=c_dict[0], marker='.', markersize=20)
+			scatter2_proxy = matplotlib.lines.Line2D([0],[0], linestyle="none", color=c_dict[1], marker='.', markersize=20)
+			ax.legend([scatter1_proxy, scatter2_proxy], ['Normal Drivers', 'Aggressive Drivers'], loc='upper left', numpoints = 1)
+			fname = 'clusters_' + flag + '.png'
+			pickle.dump(X, open(fname,'wb'))
+			plt.show()
+			plt.savefig(fname)
+		
 		clusters += i*2
 		if i == 0:
 			centroids = centers
