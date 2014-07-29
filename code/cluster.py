@@ -26,7 +26,7 @@ font = {'family' : 'sans-serif',
 matplotlib.rc('font', **font)
 
 def cluster(uber_df):
-	plot = 1
+	plot = 0
 	# uber_df = filter_badrides(uber_df, pop=0)
 	#compute speed and accel, filter out bad rides
 	# pickle.dump(uber_df, open('../pickles/uber_df_filtered.pkl','wb'))

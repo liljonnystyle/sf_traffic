@@ -1,7 +1,6 @@
 #!/usr/bin/python
 import pickle
 from pygeocoder import Geocoder, GeocoderError
-from googlemaps import GoogleMaps
 import numpy as np
 import networkx as nx
 from flask import Flask, request, session, g, redirect, url_for, abort, \
