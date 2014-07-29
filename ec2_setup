@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+
+sudo apt-get install git
+git clone https://github.com/liljonnystyle/sf_traffic/
+#sudo apt-get install python-pip
+sudo apt-get update
+sudo apt-get install python-pip
+sudo pip install pygeocoder
+sudo apt-get install python-numpy
+sudo pip install networkx
+sudo pip install flask
