@@ -199,7 +199,7 @@ def routing():
 	plt.ylim([-0.01, ymax])
 	plt.xticks([xmin, etas[0]/60, etas[1]/60, xmax])
 	plt.yticks([])
-	plt.xlabel('ETA (minutes)')
+	# plt.xlabel('ETA (minutes)')
 	ax.set_frame_on(False)
 	plt.savefig('static/norms0.png')
 
@@ -212,9 +212,9 @@ def routing():
 	plt.plot([etas[0]/60, etas[0]/60], [0, ymax], 'g--', linewidth=2)
 	plt.fill_between(x, 0, y0, facecolor='g', alpha=0.5)
 	plt.ylim([-0.01, ymax])
-	plt.xticks([xmin, etas[0], etas[1], xmax])
+	plt.xticks([xmin, etas[0]/60, etas[1]/60, xmax])
 	plt.yticks([])
-	plt.xlabel('ETA (minutes)')
+	# plt.xlabel('ETA (minutes)')
 	ax.set_frame_on(False)
 	plt.savefig('static/norms1.png')
 
@@ -227,9 +227,9 @@ def routing():
 	plt.plot([etas[1]/60, etas[1]/60], [0, ymax], 'r--', linewidth=2)
 	plt.fill_between(x, 0, y1, facecolor='r', alpha=0.5)
 	plt.ylim([-0.01, ymax])
-	plt.xticks([xmin, etas[0], etas[1], xmax])
+	plt.xticks([xmin, etas[0]/60, etas[1]/60, xmax])
 	plt.yticks([])
-	plt.xlabel('ETA (minutes)')
+	# plt.xlabel('ETA (minutes)')
 	ax.set_frame_on(False)
 	plt.savefig('static/norms2.png')
 
