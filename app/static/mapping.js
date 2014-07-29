@@ -83,7 +83,28 @@ var JRoutingMapper = {
       out += "<p class='legend'>" + clusters[i] + '</p>'
       out += "<p class='legend'>ETA: " + String(etas[i]) + ' Minutes</p>'
     }
+    out += "<p> </p>"
+    out += "<p> </p>"
+    out += "<p>ETA distributions (minutes):</p>"
     document.getElementById('out-box').innerHTML=out;
+    
+    var a0 = document.createElement("img");
+    a0.src = "static/norms0.png";
+    a0.height = 130;
+    a0.style.visibility = 'visible';
+    document.getElementById('out-box').appendChild(a0);
+
+    var a1 = document.createElement("img");
+    a1.src = "static/norms1.png";
+    a1.height = 130;
+    a1.style.visibility = 'hidden';
+    document.getElementById('out-box').appendChild(a1);
+
+    var a2 = document.createElement("img");
+    a2.src = "static/norms2.png";
+    a2.height = 130;
+    a2.style.visibility = 'hidden';
+    document.getElementById('out-box').appendChild(a2);
   },
 
 // <p><div #symbol style='color': blue></div>5</p>
