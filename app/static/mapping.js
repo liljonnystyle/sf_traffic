@@ -34,7 +34,7 @@ var JRoutingMapper = {
       coords.push(new google.maps.LatLng(points[i][0] + (line_no*0.00005) - 0.00005, points[i][1] + (line_no*0.00005) - 0.00005));
     }
     
-    var colors = ['red', 'green', 'blue'];
+    var colors = ['green', 'red', 'blue'];
     
     var symbol = {
       icon: {
@@ -75,7 +75,7 @@ var JRoutingMapper = {
   },
 
   writeOutput: function (etas) {
-    var colors = ['red', 'green', 'blue'];
+    var colors = ['green', 'red', 'blue'];
     var clusters = ['Normal Drivers', 'Aggressive Drivers', 'Google Maps Route']
     var out = ''
     for (var i = 0; i < etas.length; i += 1) {
