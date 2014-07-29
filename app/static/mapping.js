@@ -31,7 +31,7 @@ var JRoutingMapper = {
     var coords = [];
 
     for (var i = 0; i < points.length; i += 1) {
-      coords.push(new google.maps.LatLng(points[i][0] + (line_no*0.00005) - 0.000025, points[i][1] + (line_no*0.00005) - 0.000025));
+      coords.push(new google.maps.LatLng(points[i][0] + (line_no*0.00005) - 0.00005, points[i][1] + (line_no*0.00005) - 0.00005));
     }
     
     var colors = ['red', 'green', 'blue'];
@@ -50,7 +50,7 @@ var JRoutingMapper = {
       path: coords,
       icons: [symbol],
       map: JRoutingMapper.map,
-      strokeWeight: 2,
+      strokeWeight: 4,
       strokeOpacity: 0.6,
       strokeColor: colors[line_no % colors.length]
     });
