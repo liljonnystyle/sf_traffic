@@ -9,6 +9,8 @@ import requests
 import random
 import json
 import requests
+import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
 
 app = Flask(__name__)
 
@@ -111,6 +113,16 @@ def get_edge(address, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
 
 	return edge_trans_dict[edge], edge, frac
 
+@app.after_request
+def add_header(response):
+	"""
+	Add headers to both force latest IE rendering engine or Chrome Frame,
+	and also to cache the rendered page for 10 minutes.
+	"""
+	response.headers['X-UA-Compatible'] = 'IE=Edge,chrome=1'
+	response.headers['Cache-Control'] = 'public, max-age=0'
+	return response
+
 @app.route('/routing')
 def routing():
 	source, dest, time = request.args['source'], request.args['destination'], request.args['time']
@@ -121,10 +133,6 @@ def routing():
 		inds = [4, 5]
 	else:
 		inds = [0, 1]
-	# if time == 'rush':
-	# 	inds = [2, 3]
-	# else:
-	# 	inds = [0, 1]
 
 	sc_transedge, sc_edge, sc_frac = get_edge(source, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
 	ds_transedge, ds_edge, ds_frac = get_edge(dest, coord_lookup, node_coord_dict, edge_dict, edge_trans_dict)
@@ -143,16 +151,16 @@ def routing():
 		ds_node = ds_transedge[0]
 		ds_lng, ds_lat = node_coord_dict[ds_edge[0]]
 
-	# print sc_node, ds_node
-
 	ret = {'points': [], 'etas': []}
 	ret['lat'] = (sc_lat+ds_lat)/2.0
 	ret['lng'] = (sc_lng+ds_lng)/2.0
 	etas = []
+	stds = []
 	for i in inds:
 		transition_graph = cluster_graphs[i]
 		path = nx.dijkstra_path(transition_graph,sc_node,ds_node)
-		eta = 0
+		eta = 0.0
+		sig2 = 0.0
 		coords = []
 		for j in xrange(len(path)-1):
 			trans_edge = (path[j],path[j+1])
@@ -166,12 +174,65 @@ def routing():
 			else:
 				coords.append(old_coord)
 			eta += transition_graph[path[j]][path[j+1]]['weight']
+			sig2 += transition_graph[path[j]][path[j+1]]['std']**2
 		ret['points'].append(coords)
 		ret['etas'].append(format(eta/60,'.2f'))
 		etas.append(eta)
+		stds.append((sig2**0.5)/60)
+
+	xmin = min([etas[0]/60-3*stds[0], etas[1]/60-3*stds[1]])
+	xmax = max([etas[0]/60+3*stds[0], etas[1]/60+3*stds[1]])
+	x = np.linspace(xmin,xmax,num=100)
+	y0 = mlab.normpdf(x,etas[0]/60,stds[0])
+	y1 = mlab.normpdf(x,etas[1]/60,stds[1])
+	ymax = max([max(y0),max(y1)])+0.1
+
+	plt.figure(figsize=(18,8))
+	ax = plt.subplot(111)
+	plt.plot([min(x), max(x)], [0, 0], 'k-', linewidth=1)
+	plt.plot(x,y0,'g', linewidth=4)
+	plt.plot([etas[0], etas[0]], [0, ymax], 'g--', linewidth=2)
+	plt.plot(x,y1,'r', linewidth=4)
+	plt.plot([etas[1], etas[1]], [0, ymax], 'r--', linewidth=2)
+	plt.ylim([-0.01, ymax])
+	plt.xticks([xmin, etas[0], etas[1], xmax])
+	plt.yticks([])
+	plt.xlabel('ETA (minutes)')
+	ax.set_frame_on(False)
+	plt.savefig('static/norms0.png')
+
+	plt.figure(figsize=(18,8))
+	ax = plt.subplot(111)
+	plt.plot([min(x), max(x)], [0, 0], 'k-', linewidth=1)
+	plt.plot(x,y1,'r', linewidth=4)
+	plt.plot([etas[1], etas[1]], [0, ymax], 'r--', linewidth=2)
+	plt.plot(x,y0,'g', linewidth=4)
+	plt.plot([etas[0], etas[0]], [0, ymax], 'g--', linewidth=2)
+	plt.fill_between(x, 0, y0, facecolor='g', alpha=0.5)
+	plt.ylim([-0.01, ymax])
+	plt.xticks([xmin, etas[0], etas[1], xmax])
+	plt.yticks([])
+	plt.xlabel('ETA (minutes)')
+	ax.set_frame_on(False)
+	plt.savefig('static/norms1.png')
+
+	plt.figure(figsize=(18,8))
+	ax = plt.subplot(111)
+	plt.plot([min(x), max(x)], [0, 0], 'k-', linewidth=1)
+	plt.plot(x,y0,'g', linewidth=4)
+	plt.plot([etas[0], etas[0]], [0, ymax], 'g--', linewidth=2)
+	plt.plot(x,y1,'r', linewidth=4)
+	plt.plot([etas[1], etas[1]], [0, ymax], 'r--', linewidth=2)
+	plt.fill_between(x, 0, y1, facecolor='r', alpha=0.5)
+	plt.ylim([-0.01, ymax])
+	plt.xticks([xmin, etas[0], etas[1], xmax])
+	plt.yticks([])
+	plt.xlabel('ETA (minutes)')
+	ax.set_frame_on(False)
+	plt.savefig('static/norms1.png')
+
 	eta, coords = get_gmaps_dirs(source,dest)
-	# print eta
-	# print coords
+
 	etas.append(eta)
 	ret['points'].append(coords)
 	ret['etas'].append(format(eta/60,'.2f'))
@@ -181,8 +242,6 @@ def routing():
 @app.route('/', methods = ['GET'])
 def start_page():
 	return render_template('jrouting.html')
-
-# 	get_gmaps_dirs(source,destination)
 
 if __name__ == '__main__':
 	cluster_graphs = pickle.load(open('../pickles/cgraphs.pkl'))
