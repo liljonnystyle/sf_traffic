@@ -189,9 +189,12 @@ def routing():
 	y1 = mlab.normpdf(x,etas[1]/60,stds[1])
 	ymax = max([max(y0),max(y1)])+0.1
 
-	plt.figure(figsize=(18,8))
+	eta, coords = get_gmaps_dirs(source,dest)
+
+	plt.figure(figsize=(18,10))
 	ax = plt.subplot(111)
 	plt.plot([min(x), max(x)], [0, 0], 'k-', linewidth=2)
+	plt.plot([eta/60, eta/60], [0, ymax], 'b--', linewidth=5)
 	plt.plot(x,y0,'g', linewidth=8)
 	plt.plot([etas[0]/60, etas[0]/60], [0, ymax], 'g--', linewidth=5)
 	plt.plot(x,y1,'r', linewidth=8)
@@ -199,13 +202,18 @@ def routing():
 	plt.ylim([-0.01, ymax])
 	plt.xticks([xmin, etas[0]/60, etas[1]/60, xmax], fontsize = 50)
 	plt.yticks([])
-	# plt.xlabel('ETA (minutes)')
+	labels = [format(item,'.2f') for item in plt.xticks()[0]]
+	ax.set_xticklabels(labels)
+	locs, labels = plt.xticks()
+	plt.setp(labels, rotation=90)
+	plt.tight_layout()
 	ax.set_frame_on(False)
 	plt.savefig('static/norms0.png')
 
-	plt.figure(figsize=(18,8))
+	plt.figure(figsize=(18,10))
 	ax = plt.subplot(111)
 	plt.plot([min(x), max(x)], [0, 0], 'k-', linewidth=2)
+	plt.plot([eta/60, eta/60], [0, ymax], 'b--', linewidth=5)
 	plt.plot(x,y1,'r', linewidth=8)
 	plt.plot([etas[1]/60, etas[1]/60], [0, ymax], 'r--', linewidth=5)
 	plt.plot(x,y0,'g', linewidth=8)
@@ -214,13 +222,18 @@ def routing():
 	plt.ylim([-0.01, ymax])
 	plt.xticks([xmin, etas[0]/60, etas[1]/60, xmax], fontsize = 50)
 	plt.yticks([])
-	# plt.xlabel('ETA (minutes)')
+	labels = [format(item,'.2f') for item in plt.xticks()[0]]
+	ax.set_xticklabels(labels)
+	locs, labels = plt.xticks()
+	plt.setp(labels, rotation=90)
+	plt.tight_layout()
 	ax.set_frame_on(False)
 	plt.savefig('static/norms1.png')
 
-	plt.figure(figsize=(18,8))
+	plt.figure(figsize=(18,10))
 	ax = plt.subplot(111)
 	plt.plot([min(x), max(x)], [0, 0], 'k-', linewidth=2)
+	plt.plot([eta/60, eta/60], [0, ymax], 'b--', linewidth=5)
 	plt.plot(x,y0,'g', linewidth=8)
 	plt.plot([etas[0]/60, etas[0]/60], [0, ymax], 'g--', linewidth=5)
 	plt.plot(x,y1,'r', linewidth=8)
@@ -229,11 +242,13 @@ def routing():
 	plt.ylim([-0.01, ymax])
 	plt.xticks([xmin, etas[0]/60, etas[1]/60, xmax], fontsize = 50)
 	plt.yticks([])
-	# plt.xlabel('ETA (minutes)')
+	labels = [format(item,'.2f') for item in plt.xticks()[0]]
+	ax.set_xticklabels(labels)
+	locs, labels = plt.xticks()
+	plt.setp(labels, rotation=90)
+	plt.tight_layout()
 	ax.set_frame_on(False)
 	plt.savefig('static/norms2.png')
-
-	eta, coords = get_gmaps_dirs(source,dest)
 
 	etas.append(eta)
 	ret['points'].append(coords)

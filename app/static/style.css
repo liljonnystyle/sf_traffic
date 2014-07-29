@@ -48,7 +48,7 @@ html, body, #map-canvas {
 .symbol {
   width: 10px;
   height: 10px;
-  border: 6px solid #333;
+  border: 6px solid black;
   border-radius: 5px;
   background-color: rgba(204, 0, 102, 0);
   -webkit-border-radius:15px;
@@ -62,4 +62,13 @@ html, body, #map-canvas {
   text-align: left;
 }
 
+.drive-distribution-img {
+  height: 150px;
+  margin-left: auto;
+  margin-right: auto;
+  display: block;
+}
 
+.x-label {
+  text-align: center;
+}

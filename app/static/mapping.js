@@ -76,35 +76,92 @@ var JRoutingMapper = {
 
   writeOutput: function (etas) {
     var colors = ['green', 'red', 'blue'];
-    var clusters = ['Normal Drivers', 'Aggressive Drivers', 'Google Maps Route']
-    var out = ''
+    var clusters = ['Normal Drivers', 'Aggressive Drivers', 'Google Maps Route'];
+    var clus_id = ['norm','agg','goog'];
+    var out = $('<div>').attr('width','300px');
+
+    $('.driver-box').off('mouseenter');
+    $('.driver-box').off('mouseleave');
+
+    var driverLegend = $('<div>').attr('id', 'driver-legend');
     for (var i = 0; i < etas.length; i += 1) {
-      out += "<div class='symbol' style='border: 6px solid " + colors[i%4] + ";'></div>"
-      out += "<p class='legend'>" + clusters[i] + '</p>'
-      out += "<p class='legend'>ETA: " + String(etas[i]) + ' Minutes</p>'
+      var driverBox = $('<div>')
+                          .addClass('driver-box')
+                          .attr('data-cluster-id', clus_id[i]);
+      
+      var symbol = $('<div>')
+                          .addClass('symbol')
+                          .css('border-color', colors[i % 4]);
+      
+      // out += "<div class='symbol " + clus_id[i] + "' style='border: 6px solid " + colors[i%4] + ";'></div>"
+      var legend = $('<div>')
+                      .addClass('legend');
+      var t1 = $('<p>').text(clusters[i]);
+      // out += "<p class='legend'>" + clusters[i] + '</p>'
+      var t2 = $('<p>').text('ETA: ' + etas[i] + ' Minutes');
+      // out += "<p class='legend'>ETA: " + String(etas[i]) + ' Minutes</p>'
+      legend.append([t1, t2]);
+
+      driverBox.append([symbol, legend]);
+
+      driverLegend.append(driverBox);
     }
-    out += "<p> </p>"
-    out += "<p> </p>"
-    out += "<p>ETA distributions (minutes):</p>"
-    document.getElementById('out-box').innerHTML=out;
-    
-    var a0 = document.createElement("img");
-    a0.src = "static/norms0.png";
-    a0.height = 130;
-    a0.style.visibility = 'visible';
-    document.getElementById('out-box').appendChild(a0);
+    out.append(driverLegend);
 
-    var a1 = document.createElement("img");
-    a1.src = "static/norms1.png";
-    a1.height = 130;
-    a1.style.visibility = 'hidden';
-    document.getElementById('out-box').appendChild(a1);
+    // out += "<h1></h1>" //empty header for spacing
+    var driverImages = $('<div>');
+    var title = $('<p>').text('ETA distributions:');
 
-    var a2 = document.createElement("img");
-    a2.src = "static/norms2.png";
-    a2.height = 130;
-    a2.style.visibility = 'hidden';
-    document.getElementById('out-box').appendChild(a2);
+    var imageBox = $('<div>').attr('id', 'image-box');
+
+    var imgUrls = ['static/norms0.png', 'static/norms1.png', 'static/norms2.png'];
+    var ids = ['default', 'norm', 'agg'];
+    for (i = 0; i < imgUrls.length; i += 1) {
+      var img = $('<img>') 
+                      .attr('src', imgUrls[i] + '?time=' + new Date().getTime())
+                      .addClass('drive-distribution-img')
+                      .attr('data-cluster-id', ids[i]);
+
+      if (i != 0) {
+        img.css('display', 'none');
+      }
+
+      imageBox.append(img);
+    }
+    var xlabel = $('<p>').text('ETA (minutes)')
+                      .addClass('x-label');
+
+    driverImages.append([title, imageBox, xlabel]);
+
+    out.append(driverImages);
+
+    $('#out-box').html(out);
+
+
+    function showDriverGraph(graphID) {
+      var id = graphID;
+
+      if (id === 'goog') {
+        return;
+      }
+
+      // hide all
+      $('.drive-distribution-img').hide();
+
+      // show right one
+      $('.drive-distribution-img[data-cluster-id="' + id + '"]').show();
+    }
+
+    $('.driver-box').on('mouseenter', function (e) {
+      var box = $(e.currentTarget);
+      var id = box.attr('data-cluster-id')
+      showDriverGraph(id);
+      
+    });
+
+    $('.driver-box').on('mouseleave', function (e) {
+      showDriverGraph('default');
+    });
   },
 
 // <p><div #symbol style='color': blue></div>5</p>
