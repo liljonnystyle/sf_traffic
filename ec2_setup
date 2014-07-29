@@ -9,3 +9,4 @@ sudo pip install pygeocoder
 sudo apt-get install python-numpy
 sudo pip install networkx
 sudo pip install flask
+sudo apt-get install python-matplotlib
