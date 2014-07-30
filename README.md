@@ -27,16 +27,16 @@ python libraries used:
 
 data sources:
  * uber_data
-	-includes 25,000 anonymized uber black car GPS data in SF
-	-ride id, timestamps, latitude, and longitude
-	-rides are anonymized by truncating beginning and end of each ride, as well as modifying the original date; day of week is still preserved
-	-repeated datapoints are removed
-	-see: http://www.infochimps.com/datasets/uber-anonymized-gps-logs
+   * includes 25,000 anonymized uber black car GPS data in SF
+   * ride id, timestamps, latitude, and longitude
+   * rides are anonymized by truncating beginning and end of each ride, as well as modifying the original date; day of week is still preserved
+   * repeated datapoints are removed
+   * see: http://www.infochimps.com/datasets/uber-anonymized-gps-logs
 
  * street_data
-	-includes street shape files for SF streets
-	-each entry contains a street, defined from intersection to consecutive intersection, with one-way and class specified
-	-see: https://data.sfgov.org/Geography/Streets-of-San-Francisco-Zipped-Shapefile-Format-/wbm8-ratb
+   * includes street shape files for SF streets
+   * each entry contains a street, defined from intersection to consecutive intersection, with one-way and class specified
+   * see: https://data.sfgov.org/Geography/Streets-of-San-Francisco-Zipped-Shapefile-Format-/wbm8-ratb
 
 ##General Approach
 
