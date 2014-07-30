@@ -29,6 +29,7 @@ data sources:
  * uber_data
    * includes 25,000 anonymized uber black car GPS data in SF
    * ride id, timestamps, latitude, and longitude
+   * timestamps are generally four seconds apart
    * rides are anonymized by truncating beginning and end of each ride, as well as modifying the original date; day of week is still preserved
    * repeated datapoints are removed
    * see: http://www.infochimps.com/datasets/uber-anonymized-gps-logs
@@ -39,11 +40,10 @@ data sources:
    * see: https://data.sfgov.org/Geography/Streets-of-San-Francisco-Zipped-Shapefile-Format-/wbm8-ratb
 
 ##General Approach
-
 My goal is to build a routing algorithm specific to driver behaviors. To do this, I need to build a network graph of streets, and populate edge weights using (clustered) driver data. So there are essentially two main challenges I am facing. The first is clustering drivers by behavior, and the second is building network graphs based on each of those clusters. While these tasks may seem like a sequential two-step process, in reality, there are many moving parts and the tasks actually intermingle quite a bit. Hopefully I can illuminate most of the process here.
 
 ##Loading Data
-
+(found in code/load_data.py)
 ###Uber Data
 The first step, of course, is to load in the data. The Uber data loads in quite simply enough, as it is just a tsv file. The data can be read in with pandas, and simple cleaning is done. This includes:
 
@@ -66,6 +66,7 @@ My second try was to cross-reference google maps API to find coordinates of all 
 Fortunately I eventually found a 20+ year old code written in Fortran 77 which does this conversion! (Sidenote: the code's readme instructs to load it from a floppy.) This code can be found in the nad83 directory of this project repository. While using and interpretting this code was also non-trivial, it made the problem significantly easier and is a definitively robust solution.
 
 ##Building a "Street Graph" and a "Transition Graph"
+(found in code/load_data.py)
 While I have information on each street (intersection-to-intersection), I actually lack information on legal and illegal turns. Morever, to properly assess ETA's, intersections can not be translated as nodes (otherwise, they would have infinite speed through zero distance, or zero weight). So ultimately what I need is a "transition graph," which contains street edges and transition edges. I am defining transition edges as an abstract edge which connects two intersecting streets.
 
 ###Street Graph
@@ -79,6 +80,7 @@ To build a transition graph, each edge from the street graph above is first tran
 The original edge weights from the Street Graph are translated directly over to this transition graph, despite the edge shortening. Recall that the transition edges are abstractions, so the street edges technically still should have the same length. The transition edges are given large weights (i.e., 1000 seconds) as default. This is done because the initial assumption is that all transitions are illegal, and will only be deemed legal if actual drivers are observed making that transition. For example, on Market Street, it is generally illegal to make left turns. This information is not given explicitly in my street data, so the model can only learn about legality through observation, which will come into play later.
 
 ##Projecting Drivers onto Streets
+(found in code/project.py)
 This step is quite possibly the most time-consuming, challenging, and rewarding part of the project. I need to project (or map) drivers onto streets so that I can associate speeds (actually times) with roads -- to get edge weights. Even with the pre-cleaning done on the Uber data previously, the raw data is still quite noisy.
 
 Initially, I was mapping drivers in a two-step process: first find the nearest edge (from the street graph) and how far along they are on the street. Second, if they are within the first 10% or last 25% (recall the asymmetrical shortening), then associate them with a transition edge, otherwise associate them with a street edge. This actually did not work very well for a number of reasons:
@@ -92,6 +94,7 @@ I may even be forgetting one or two reasons. Eventually, I decided to leverage t
 This process also allows me to clean up the data significantly. After mapping coordinates to streets, I can adjust coordinates by placing them exactly onto their respective streets. While I had originally intended to use a Kalman Filter to do this cleaning (or pre-cleaning), I have found that this method works very well and the Kalman Filter conversely makes things worse (at least in some cases). Perhaps in the future, I may revisit the Kalman Filter to see if the two methods can be employed synergistically.
 
 ##Clustering Driving Behaviors
+(found in code/cluster.py)
 My intention for this project was to find clusters of different driving behaviors. I had aspirations to engineer features such as mean/median/max velocities, velocity autocorrelation/fourier transform of velocity profile, mean free path, lane change frequency, quantified aggression, fuel/energy consumption, etc. Ultimately I decided to keep things simple because all these features are derived out of only two time-series (i.e., latitude and longitude) -- not to mention it would be virtually impossible to infer lane changes. While I have computed velocity and acceleration time-series, I really only ended up using the following features per driver:
 
  * Average Velocity (on surface streets only)
@@ -106,6 +109,23 @@ Prior to clustering, I divided the data into three time-categories: morning rush
 For clustering, I did a pre-analysis with hierarchical clustering. I found that visually, there were potentially three to four clusters per time-category, however the dendrogram pruning would be very case-specific and non-trivial. Specifically, clusters would be pruned at different cluster sizes. Not only did this over-complicate the problem, I also realized that some clusters would be so small that coverage in the city would be quite sparse. Therefore, I ultimately decided to use K-Means clustering with two clusters for each time-category.
 
 ##Computing Edge Weights for Each Cluster
+(found in code/cluster_graphs.py)
+If you recall, in the projection implementation, I had only mapped drivers onto street edges, and not onto transition edges. Here, it becomes evident why projection onto transition edges is unnecessary. Recall again that transition edges are abstractions, so mapping a driver onto an abstract edge would be fruitless.
 
+Moreover, this becomes important when computing edge weights for the transition graph. My original plan (when transition edges were physical segments of the street/intersection) was to associate driver velocities at each time stamp with the associated edge that they were currently on. Due to the transition edges being so short, it would be very rare to find a driver actually on a transition edge (unless they were stopped at the intersection). This would result in extremely long wait times at every intersection, even when intersections don't have a traffic light or stop sign (recall that the default weight is 1000 seconds -- so if it is not overwritten by any observations, the default will remain).
+
+Another problem is that a car may not physically be located at the intersection while they are waiting for a light to change. If traffic is backed up for half the block, the car would be sitting in the "street edge" portion and the wait time would be associated incorrectly.
+
+After much deliberation, I decided that the velocity on the street edge should determine how each timestamp should be associated. Any zero velocity should be associated with the upcoming transition edge, and any finite velocity should be associated with the street edge. Note that each street edge has approximately three upcoming transition edges (left turn, straight, right turn). Therefore, the wait time can only be associated to a transition edge if the next consecutive street edge is known.
+
+Also note that the weights are in units of time. They should not be based on mean velocities. See for example:
+
+<t> = (t_1 + t_2 + t_3) / 3
+	!= L / ((v_1 + v_2 + v_3) / 3)
+
+It would also be unnecessary to compute the mean of the inverse-velocities because the time is actually right in front of us. Since I have timestamps (spaced four seconds apart), all I need to do is count the number of finite and zero velocity timestamps (on a particular edge) and multiply by four seconds.
+
+In hindsight, it was discovered that some transition edges are not explored by some clusters due to sparseness of data. This results in the default weights, which makes ETA predictions extremely long. As a fix for this problem, the whole dataset is used to pre-compute updated default edge weights. This propogates knowledge of turn-legality and approximate wait times to all clusters. So this step is inserted prior to computing edge weights for each cluster.
 
 ##Web App
+(found in app/*)
