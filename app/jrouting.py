@@ -162,6 +162,7 @@ def routing():
 		eta = 0.0
 		sig2 = 0.0
 		coords = []
+		old_coord = 0
 		for j in xrange(len(path)-1):
 			trans_edge = (path[j],path[j+1])
 			if trans_edge in trans_edge_dict:
@@ -172,7 +173,8 @@ def routing():
 				old_coord = node_coord_dict[edge[1]]
 				old_coord = (old_coord[1], old_coord[0])
 			else:
-				coords.append(old_coord)
+				if old_coord:
+					coords.append(old_coord)
 			eta += transition_graph[path[j]][path[j+1]]['weight']
 			sig2 += transition_graph[path[j]][path[j+1]]['std']**2
 		ret['points'].append(coords)
