@@ -1,11 +1,13 @@
 #ZipLee: A vehicular routing app for specific driving behaviors
 
+liljonnystyle.github.io/ziplee/
+
 This is a data science project intended to study San Francisco traffic trends. In its final form, it has become a web app designed to aid users in finding optimal routes through San Francisco for their specific driving behaviors.
 
 langugages used:
  * python
  * bash
- * javascript
+ * html/javascript/css
  * fortran77
 
 python libraries used:
@@ -44,6 +46,7 @@ My goal is to build a routing algorithm specific to driver behaviors. To do this
 
 ##Loading Data
 (found in code/load_data.py)
+
 ###Uber Data
 The first step, of course, is to load in the data. The Uber data loads in quite simply enough, as it is just a tsv file. The data can be read in with pandas, and simple cleaning is done. This includes:
 
@@ -67,6 +70,7 @@ Fortunately I eventually found a 20+ year old code written in Fortran 77 which d
 
 ##Building a "Street Graph" and a "Transition Graph"
 (found in code/load_data.py)
+
 While I have information on each street (intersection-to-intersection), I actually lack information on legal and illegal turns. Morever, to properly assess ETA's, intersections can not be translated as nodes (otherwise, they would have infinite speed through zero distance, or zero weight). So ultimately what I need is a "transition graph," which contains street edges and transition edges. I am defining transition edges as an abstract edge which connects two intersecting streets.
 
 ###Street Graph
@@ -81,6 +85,7 @@ The original edge weights from the Street Graph are translated directly over to 
 
 ##Projecting Drivers onto Streets
 (found in code/project.py)
+
 This step is quite possibly the most time-consuming, challenging, and rewarding part of the project. I need to project (or map) drivers onto streets so that I can associate speeds (actually times) with roads -- to get edge weights. Even with the pre-cleaning done on the Uber data previously, the raw data is still quite noisy.
 
 Initially, I was mapping drivers in a two-step process: first find the nearest edge (from the street graph) and how far along they are on the street. Second, if they are within the first 10% or last 25% (recall the asymmetrical shortening), then associate them with a transition edge, otherwise associate them with a street edge. This actually did not work very well for a number of reasons:
@@ -95,6 +100,7 @@ This process also allows me to clean up the data significantly. After mapping co
 
 ##Clustering Driving Behaviors
 (found in code/cluster.py)
+
 My intention for this project was to find clusters of different driving behaviors. I had aspirations to engineer features such as mean/median/max velocities, velocity autocorrelation/fourier transform of velocity profile, mean free path, lane change frequency, quantified aggression, fuel/energy consumption, etc. Ultimately I decided to keep things simple because all these features are derived out of only two time-series (i.e., latitude and longitude) -- not to mention it would be virtually impossible to infer lane changes. While I have computed velocity and acceleration time-series, I really only ended up using the following features per driver:
 
  * Average Velocity (on surface streets only)
@@ -110,6 +116,7 @@ For clustering, I did a pre-analysis with hierarchical clustering. I found that 
 
 ##Computing Edge Weights for Each Cluster
 (found in code/cluster_graphs.py)
+
 If you recall, in the projection implementation, I had only mapped drivers onto street edges, and not onto transition edges. Here, it becomes evident why projection onto transition edges is unnecessary. Recall again that transition edges are abstractions, so mapping a driver onto an abstract edge would be fruitless.
 
 Moreover, this becomes important when computing edge weights for the transition graph. My original plan (when transition edges were physical segments of the street/intersection) was to associate driver velocities at each time stamp with the associated edge that they were currently on. Due to the transition edges being so short, it would be very rare to find a driver actually on a transition edge (unless they were stopped at the intersection). This would result in extremely long wait times at every intersection, even when intersections don't have a traffic light or stop sign (recall that the default weight is 1000 seconds -- so if it is not overwritten by any observations, the default will remain).
@@ -120,8 +127,7 @@ After much deliberation, I decided that the velocity on the street edge should d
 
 Also note that the weights are in units of time. They should not be based on mean velocities. See for example:
 
-<t> = (t_1 + t_2 + t_3) / 3
-	!= L / ((v_1 + v_2 + v_3) / 3)
+t_avg = (t_1 + t_2 + t_3) / 3 != L / ((v_1 + v_2 + v_3) / 3)
 
 It would also be unnecessary to compute the mean of the inverse-velocities because the time is actually right in front of us. Since I have timestamps (spaced four seconds apart), all I need to do is count the number of finite and zero velocity timestamps (on a particular edge) and multiply by four seconds.
 
@@ -129,3 +135,10 @@ In hindsight, it was discovered that some transition edges are not explored by s
 
 ##Web App
 (found in app/*)
+
+After network graphs are updated with edge weights for each cluster, I can start predicting routes. I developed a web app built off of Google Maps API, which plots the routes predicted for all clusters in a given time-category. Routes are animated to show an approximate simulation through time (currently, points move linearly in time). An estimation of the ETA distributions for each cluster is also displayed, to show how much certainty is in the predicted ETA.
+
+I also ping Google's routing algorithm to compare my routes to Google's (which does not account for time of day). To my knowledge, Google's routes have only recently updated to predict routes accounting for traffic. Previously they had only shown ETA's accounting for traffic, but routes remained static. The API appears to show the static route with an unadjusted ETA.
+
+The final product can be found at:
+liljonnystyle.github.io/ziplee/
