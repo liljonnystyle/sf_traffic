@@ -63,7 +63,7 @@ My first pass involved trying to align the map visually as well as via triangula
 
 My second try was to cross-reference google maps API to find coordinates of all street intersections. Not only did this quickly blow out my daily request limit, there were maybe hundreds of drastically misplaced intersections, I had to abandon this routine.
 
-Fortunately I eventually found a 20+ year old code written in Fortran 77 which does this conversion! This code can be found in the nad83 directory of this project repository. While using and interpretting this code was also non-trivial, it made the problem significantly easier and is a definitively robust solution.
+Fortunately I eventually found a 20+ year old code written in Fortran 77 which does this conversion! (Sidenote: the code's readme instructs to load it from a floppy.) This code can be found in the nad83 directory of this project repository. While using and interpretting this code was also non-trivial, it made the problem significantly easier and is a definitively robust solution.
 
 ##Building a "Street Graph" and a "Transition Graph"
 While I have information on each street (intersection-to-intersection), I actually lack information on legal and illegal turns. Morever, to properly assess ETA's, intersections can not be translated as nodes (otherwise, they would have infinite speed through zero distance, or zero weight). So ultimately what I need is a "transition graph," which contains street edges and transition edges. I am defining transition edges as an abstract edge which connects two intersecting streets.
@@ -92,7 +92,20 @@ I may even be forgetting one or two reasons. Eventually, I decided to leverage t
 This process also allows me to clean up the data significantly. After mapping coordinates to streets, I can adjust coordinates by placing them exactly onto their respective streets. While I had originally intended to use a Kalman Filter to do this cleaning (or pre-cleaning), I have found that this method works very well and the Kalman Filter conversely makes things worse (at least in some cases). Perhaps in the future, I may revisit the Kalman Filter to see if the two methods can be employed synergistically.
 
 ##Clustering Driving Behaviors
+My intention for this project was to find clusters of different driving behaviors. I had aspirations to engineer features such as mean/median/max velocities, velocity autocorrelation/fourier transform of velocity profile, mean free path, lane change frequency, quantified aggression, fuel/energy consumption, etc. Ultimately I decided to keep things simple because all these features are derived out of only two time-series (i.e., latitude and longitude) -- not to mention it would be virtually impossible to infer lane changes. While I have computed velocity and acceleration time-series, I really only ended up using the following features per driver:
+
+ * Average Velocity (on surface streets only)
+ * Average Acceleration (on surface streets only)
+ * Average Deceleration (on surface streets only)
+ * Mean Free Path as time (the average time spent moving in between pauses in traffic)
+
+I feel that these four features would appropriately distinguish aggressive and passive drivers, and even simple features like maximum velocity, maximum acceleration, etc. would not add significant value.
+
+Prior to clustering, I divided the data into three time-categories: morning rush hour, afternoon rush hour, and other. Some drivers who straddle the rush hour/non-rush hour cutoff were aggregated into category which they are predominantly in.
+
+For clustering, I did a pre-analysis with hierarchical clustering. I found that visually, there were potentially three to four clusters per time-category, however the dendrogram pruning would be very case-specific and non-trivial. Specifically, clusters would be pruned at different cluster sizes. Not only did this over-complicate the problem, I also realized that some clusters would be so small that coverage in the city would be quite sparse. Therefore, I ultimately decided to use K-Means clustering with two clusters for each time-category.
 
 ##Computing Edge Weights for Each Cluster
+
 
 ##Web App
