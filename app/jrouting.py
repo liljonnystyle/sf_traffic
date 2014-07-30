@@ -6,9 +6,7 @@ import networkx as nx
 from flask import Flask, request, session, g, redirect, url_for, abort, \
      render_template, flash, jsonify
 import requests
-import random
 import json
-import requests
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt

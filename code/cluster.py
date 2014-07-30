@@ -28,7 +28,6 @@ matplotlib.rc('font', **font)
 def cluster(uber_df):
 	plot = 0
 	# uber_df = filter_badrides(uber_df, pop=0)
-	#compute speed and accel, filter out bad rides
 	# pickle.dump(uber_df, open('../pickles/uber_df_filtered.pkl','wb'))
 	uber_df = pickle.load(open('../pickles/uber_df_filtered.pkl'))
 
@@ -149,6 +148,9 @@ def compute_accel(uber_df):
 	return acceldf
 
 def filter_badrides(uber_df, pop=1):
+	'''
+	compute speed and accel, filter out bad rides
+	'''
 	print 'computing speed'
 	uber_df = uber_df.join(compute_speed(uber_df))
 	print 'filtering bad speeds'
@@ -169,10 +171,10 @@ def filter_badrides(uber_df, pop=1):
 
 	return uber_df
 
-'''
-create rush hour flag column in Uber DataFrame
-'''
 def flag_rushhour(uber_df):
+	'''
+	create rush hour flag column in Uber DataFrame
+	'''
 	print len(uber_df['ride'].unique())
 	reindexed_df = uber_df.set_index('datetime')
 	reindexed_df['rush_hour'] = 'none'
@@ -213,10 +215,10 @@ def get_features(df):
 	X = X.fillna(X.mean())
 	return X
 
-'''
-compute kmeans clusters
-'''
 def get_clusters(X, n=4):
+	'''
+	compute kmeans clusters
+	'''
 	# distxy = squareform(pdist(X_scaled, metric='euclidean'))
 	# linkage(distxy, method='complete')
 	model = KMeans(n,n_jobs=-1)

@@ -3,13 +3,13 @@ import pandas as pd
 import networkx as nx
 import ipdb
 
-'''
-project coordinates onto street graph, and then onto transition graph
-'''
 def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
-
-	''' does what set(nx.ego_graph(G,node,radius).edges()) should do '''
+	'''
+	project coordinates onto street graph, and then onto transition graph
+	'''
+	
 	def get_lookup_edges(G,node,radius):
+		''' does what set(nx.ego_graph(G,node,radius).edges()) should do '''
 		if radius == 1:
 			return set([(node, neigh) for neigh in G.neighbors(node)])
 		if radius > 1:
@@ -308,20 +308,20 @@ def project(uber_df, G, transG, node_dict, edge_dict, trans_dict, coord_lookup):
 
 	return uber_df
 
-'''
-INPUT: start and stop coordinates of a vector
-OUTPUT: length and unit vector
-'''
 def edge_eval(start, stop):
+	'''
+	INPUT: start and stop coordinates of a vector
+	OUTPUT: length and unit vector
+	'''
 	length = ((start[0] - stop[0])**2 + (start[1] - stop[1])**2)**0.5
 	unit_vec = np.array([(stop[0] - start[0])/length, (stop[1] - start[1])/length])
 	return length, unit_vec
 
-'''
-find perpendicular distance from point to line
-find fraction along vector of projected point
-'''
 def point_to_line(point, start, stop, edge_len, edge_vec):
+	'''
+	find perpendicular distance from point to line
+	find fraction along vector of projected point
+	'''
 	startpoint_len, startpoint_vec = edge_eval(start, point)
 	cosang = np.dot(edge_vec, startpoint_vec)
 	sinang = np.linalg.norm(np.cross(edge_vec, startpoint_vec))
@@ -330,10 +330,10 @@ def point_to_line(point, start, stop, edge_len, edge_vec):
 	frac = startpoint_len * cosang / edge_len
 	return dist, frac
 
-'''
-create label for consecutive edges
-'''
 def consecutive_edges(df):
+	'''
+	create label for consecutive edges
+	'''
 	nrows = len(df)
 	cons_edges = np.zeros((nrows,1))
 	edgecount = 0

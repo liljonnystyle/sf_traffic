@@ -14,13 +14,13 @@ from datetime import timedelta
 radius = 3963.1676
 rad_x = 3963.1676*np.cos(37.7833*math.pi/180)
 
-'''
-load uber_df from csv
-load street_df from json
-assemble street graph
-assemble transition graph
-'''
 def load_fresh():
+	'''
+	load uber_df from csv
+	load street_df from json
+	assemble street graph
+	assemble transition graph
+	'''
 	print 'loading uber_df from csv...'
 	# xmax = -122.36
 	# xmin = -122.4
@@ -78,13 +78,13 @@ def load_fresh():
 
 	return uber_df, street_df, street_graph, node_coord_dict, coord_node_dict, edge_dict, coord_lookup, transition_graph, trans_edge_dict, edge_trans_dict, trans_dict
 
-'''
-read uber_df from pickle
-read street_df from pickle
-read street graph from pickle
-read transition graph from pickle
-'''
 def from_pickle():
+	'''
+	read uber_df from pickle
+	read street_df from pickle
+	read street graph from pickle
+	read transition graph from pickle
+	'''
 	print 'reading uber_df from pickle...'
 	uber_df = pickle.load(open('../pickles/uber_df.pkl'))
 	print 'read uber_df'
@@ -117,10 +117,10 @@ def from_pickle():
 def dparser(datestring):
 	return datetime.datetime.strptime(datestring,'%Y-%m-%dT%H:%M:%S+00:00')
 
-'''
-load uber coord data from csv into DataFrame
-'''
 def load_uber(nlines=-1):
+	'''
+	load uber coord data from csv into DataFrame
+	'''
 	column_names = ['ride', 'datetime', 'y', 'x']
 	uber_df = pd.read_csv('../uber_data/all.tsv', sep='\t', header=None, names=column_names,
 		parse_dates=[1], date_parser=dparser)
@@ -140,10 +140,10 @@ def load_uber(nlines=-1):
 def fill_timeseries(data):
 	return data.set_index('datetime').resample('4000L',fill_method='pad').reset_index()
 
-'''
-load street geo data from json into DataFrame
-'''
 def load_streets(n=0):
+	'''
+	load street geo data from json into DataFrame
+	'''
 	with open('../street_centerlines/stclines_streets.json') as f:
 		streets = json.loads(f.read())
 
@@ -201,6 +201,9 @@ def load_streets(n=0):
 			row['xstop'] = lng
 			row['ystop'] = lat
 
+	'''
+	The following is an original attempt at finding street coordinates using google maps api
+	'''
 	# apikeys = ['AIzaSyDFKC9RzHpgfCdnslTL0QXNHO_JpWcYXuQ',
 	# 		'AIzaSyBTO9qExEKhrwT4lr8g0t3-B99wOWdPZ50',
 	# 		'AIzaSyBxH0Ddo3jA5hs4S2K4p97gOFGTd_JenUo',
@@ -291,10 +294,10 @@ def load_streets(n=0):
 
 	return df
 
-'''
-Create directed street network graph from street DataFrame
-'''
 def create_graph(df):
+	'''
+	Create directed street network graph from street DataFrame
+	'''
 	G=nx.DiGraph().to_directed()
 	edge_dict = {}
 	node_count = 0
@@ -303,9 +306,9 @@ def create_graph(df):
 	coord_lookup = {}
 
 	class_wt_dict = {}
-	class_wt_dict[0] = 1./20
+	class_wt_dict[0] = 1./15
 	class_wt_dict[1] = 1./65
-	class_wt_dict[2] = 1./45
+	class_wt_dict[2] = 1./30
 	class_wt_dict[3] = 1./35
 	class_wt_dict[4] = 1./35
 	class_wt_dict[5] = 1./25
@@ -403,11 +406,11 @@ def create_graph(df):
 	'''
 	return G, node_coord_dict, coord_node_dict, edge_dict, coord_lookup
 
-'''
-INPUT: start and stop coordinates of a vector
-OUTPUT: length and unit vector
-'''
 def edge_eval(start, stop, to_miles=0):
+	'''
+	INPUT: start and stop coordinates of a vector
+	OUTPUT: length and unit vector
+	'''
 	if to_miles == 1:
 		newstart = (start[0] * 2 * math.pi * rad_x / 360, start[1] * 2 * math.pi * radius / 360)
 		newstop = (stop[0] * 2 * math.pi * rad_x / 360, stop[1] * 2 * math.pi * radius / 360)
@@ -418,22 +421,22 @@ def edge_eval(start, stop, to_miles=0):
 	unit_vec = np.array([(newstop[0] - newstart[0])/length, (newstop[1] - newstart[1])/length])
 	return length, unit_vec
 
-'''
-INPUT: start/stop coordinates (as a tuple), length, and unit vector
-OUTPUT: new vector shortened to 1%-90% of original vector
-'''
 def shorten_edge(coord, length, unit_vec):
+	'''
+	INPUT: start/stop coordinates (as a tuple), length, and unit vector
+	OUTPUT: new vector shortened to 10%-75% of original vector
+	'''
 	# could actually just compute full vector here...
 	# but length and unit_vec give more flexibility for later changes
 	start_coord = (coord[0]+unit_vec[0]*length*0.1, coord[1]+unit_vec[1]*length*0.1)
 	stop_coord = (coord[0]+unit_vec[0]*length*0.75, coord[1]+unit_vec[1]*length*0.75)
 	return start_coord, stop_coord
 
-'''
-INPUT: original street graph, node-to-coordinates dictionary, edge dictionary
-OUTPUT: new directed graph with shortened street edges and new transition edges
-'''
 def create_transition_graph(G, node_dict, edge_dict):
+	'''
+	INPUT: original street graph, node-to-coordinates dictionary, edge dictionary
+	OUTPUT: new directed graph with shortened street edges and new transition edges
+	'''
 	newG = nx.DiGraph().to_directed()
 	start_dict = {}
 	stop_dict = {}

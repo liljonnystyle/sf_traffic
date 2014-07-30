@@ -8,9 +8,9 @@ import cluster_graphs
 import ipdb
 
 def main():
-	data_from_pickle = 1
+	data_from_pickle = 0
 	projection_from_pickle = 1
-	clusters_from_pickle = 0
+	clusters_from_pickle = 1
 
 	if data_from_pickle:
 		uber_df, street_df, street_graph, node_coord_dict, coord_node_dict, \
