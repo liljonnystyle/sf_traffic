@@ -66,4 +66,22 @@ My second try was to cross-reference google maps API to find coordinates of all 
 Fortunately I eventually found a 20+ year old code written in Fortran 77 which does this conversion! This code can be found in the nad83 directory of this project repository. While using and interpretting this code was also non-trivial, it made the problem significantly easier and is a definitively robust solution.
 
 ##Building a "Street Graph" and a "Transition Graph"
+While I have information on each street (intersection-to-intersection), I actually lack information on legal and illegal turns. Morever, to properly assess ETA's, intersections can not be translated as nodes (otherwise, they would have infinite speed through zero distance, or zero weight). So ultimately what I need is a "transition graph," which contains street edges and transition edges. I am defining transition edges as an abstract edge which connects two intersecting streets.
 
+###Street Graph
+First, to build the street graph, I simply take each street from my street data, and assemble directed edges (using networkx). Start and stop coordinates are checked against previously assigned nodes to establish connectivity of the graph. Meanwhile, I assume that the class code of the street signifies a speed limit, which I use in conjunction with the street length to compute an estimated edge weight (i.e., a default for time to traverse the edge).
+
+It is important to note that during assembly of this graph (and the following graph), several dictionaries are stored which make information lookup possible later. Especially important is a coordinate lookup dictionary, which is keyed on two-digit-truncated coordinate tuples, and contains lists of street edges which fall in the vicinity of those coordinates. This makes searching for nearby streets much simpler later, as the search breadth is reduced dramatically.
+
+###Transition Graph
+To build a transition graph, each edge from the street graph above is first translated into a street edge. Although the transition edges are actually abstractions, it simplifies the assembly by giving them a physical representation. Concretely, every street edge is shortened; the shortened edge starts at 10% of the original edge and ends at 75% of the original edge. The asymmetrical shortening is a byproduct of a previous attempt to connect street edges while maintaining directionality. The current implementation does not depend on the actual coordinates of the shortened edges. After edges are shortened, they are reconnected through careful bookkeeping of original and updated node numbers.
+
+The original edge weights from the Street Graph are translated directly over to this transition graph, despite the edge shortening. Recall that the transition edges are abstractions, so the street edges technically still should have the same length. The transition edges are given large weights (i.e., 1000 seconds) as default. This is done because the initial assumption is that all transitions are illegal, and will only be deemed legal if actual drivers are observed making that transition. For example, on Market Street, it is generally illegal to make left turns. This information is not given explicitly in my street data, so the model can only learn about legality through observation, which will come into play later.
+
+##Projecting Drivers onto Streets
+
+##Clustering Driving Behaviors
+
+##Computing Edge Weights for Each Cluster
+
+##Web App
